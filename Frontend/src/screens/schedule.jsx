@@ -3,7 +3,8 @@ import DateTimeDisplay from '../components/DateTimeDisplay';
 import DatesRegister from '../components/DatesRegister';
 import Ready from '../components/Ready';
 import DatesWorker from '../services/DatesWorker';
-import { FaBookBookmark, FaPlus, FaTrashAlt, FaUserTie, FaTools } from 'react-icons/fa';
+import { FaBookBookmark } from 'react-icons/fa6';
+import { FaPlus, FaTrashAlt, FaUserTie, FaTools } from 'react-icons/fa';
 
 const Schedule = () => {
   const API_URL = import.meta.env.VITE_API_URL;
