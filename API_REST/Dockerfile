@@ -32,7 +32,7 @@ COPY . .
 RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache database \
     && chmod -R 775 storage bootstrap/cache database
 
-EXPOSE 8000
+EXPOSE ${BACKEND_PORT:-8000}
 
 CMD ["sh", "-c", "\
     if [ ! -f vendor/autoload.php ]; then composer install --no-interaction --prefer-dist; fi && \
@@ -40,5 +40,5 @@ CMD ["sh", "-c", "\
     grep -q '^APP_KEY=base64:' .env || php artisan key:generate --force && \
     until php artisan migrate --force; do echo 'Esperando a MariaDB...'; sleep 3; done && \
     php artisan db:seed --force && \
-    php artisan serve --host=0.0.0.0 --port=8000 \
+    php artisan serve --host=0.0.0.0 --port=${BACKEND_PORT:-8000} \
 "]
