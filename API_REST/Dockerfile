@@ -38,6 +38,7 @@ CMD ["sh", "-c", "\
     if [ ! -f vendor/autoload.php ]; then composer install --no-interaction --prefer-dist; fi && \
     if [ ! -f .env ]; then cp .env.example .env; fi && \
     grep -q '^APP_KEY=base64:' .env || php artisan key:generate --force && \
+    php artisan config:clear && \
     until php artisan migrate --force; do echo 'Esperando a MariaDB...'; sleep 3; done && \
     php artisan db:seed --force && \
     php artisan serve --host=0.0.0.0 --port=${BACKEND_PORT:-8000} \
