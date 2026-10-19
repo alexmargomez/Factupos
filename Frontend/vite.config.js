@@ -11,13 +11,21 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
+    allowedHosts: true,
     watch: {
       usePolling: true,
+    },
+    proxy: {
+      '/api': {
+        target: process.env.VITE_BACKEND_PROXY || 'http://backend:8000',
+        changeOrigin: true,
+      },
     },
   },
   preview: {
     host: '0.0.0.0',
     port: 5173,
+    allowedHosts: true,
   },
 });
 
