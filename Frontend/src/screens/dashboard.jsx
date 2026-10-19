@@ -65,7 +65,7 @@ const Dashboard = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div>
           <h1 className="text-2xl font-extrabold text-[#023047] tracking-tight">
-            ELECTRIMOTOS ZAPATOCA
+            FACTUPOS — PANEL PRINCIPAL
           </h1>
           <p className="text-sm text-slate-500">
             Panel de control principal y accesos rápidos

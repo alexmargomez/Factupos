@@ -1,6 +1,5 @@
 import { LoginForm } from "../components/LoginVal";
 import Factupos from "../assets/factupos.svg";
-import Electrimotos from "../assets/electrimotos.png";
 
 function LoginScreen() {
   return (
@@ -20,14 +19,17 @@ function LoginScreen() {
           <LoginForm />
         </div>
 
-        {/* Branding Electrimotos */}
+        {/* Branding FactuPOS */}
         <div className="hidden lg:flex flex-col items-center justify-center w-1/2 p-6 text-center">
           <img
-            src={Electrimotos}
-            alt="Electrimotos Logo"
-            className="max-w-md w-full object-contain drop-shadow-2xl"
+            src={Factupos}
+            alt="FactuPOS Logo"
+            className="max-w-xs w-full object-contain drop-shadow-2xl"
           />
-          <p className="text-sky-200/90 mt-6 text-lg font-medium max-w-md">
+          <h2 className="text-white font-black text-3xl mt-4 tracking-wide">
+            FACTUPOS
+          </h2>
+          <p className="text-sky-200/90 mt-3 text-lg font-medium max-w-md">
             Sistema integral de facturación POS, control de inventario y agendamiento de taller.
           </p>
         </div>
