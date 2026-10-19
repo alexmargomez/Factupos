@@ -48,7 +48,7 @@ class InvoiceController extends Controller
             ->findOrFail($invoice->sale_id);
 
         $logoBase64 = null;
-        $svgPath = public_path('img/electrimotosSm.svg');
+        $svgPath = public_path('img/factupos.svg');
         if (file_exists($svgPath)) {
             $logoBase64 = 'data:image/svg+xml;base64,' . base64_encode(file_get_contents($svgPath));
         }

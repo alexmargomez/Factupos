@@ -33,14 +33,14 @@ const NavBar = () => {
         title="Ir al Panel Principal"
       >
         <div className="w-10 h-10 rounded-xl bg-[#ffb703] text-[#023047] flex items-center justify-center font-black text-lg shadow-md shrink-0 group-hover:scale-105 transition-transform">
-          EM
+          FP
         </div>
         <div className="hidden lg:flex flex-col overflow-hidden">
           <span className="font-extrabold text-sm tracking-wide text-white truncate">
-            ELECTRIMOTOS
+            FACTUPOS
           </span>
           <span className="text-[11px] text-sky-300 font-medium truncate">
-            FactuPOS Sistema
+            Sistema POS y Taller
           </span>
         </div>
       </div>

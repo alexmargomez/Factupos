@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
-import Electrimotos from '../assets/electrimotosSm.svg';
+import FactuposLogo from '../assets/factupos.svg';
 import FactuPrint from './FactuPrint';
 import { FaFileInvoice, FaPrint, FaTimes, FaUser, FaMotorcycle } from 'react-icons/fa';
 
@@ -195,12 +195,12 @@ const FactuView = ({ id, customerID, vehicleID, total, saleItem }) => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center shadow-2xs">
                 <img
-                  src={Electrimotos}
-                  alt="Electrimotos"
+                  src={FactuposLogo}
+                  alt="FactuPOS"
                   className="h-14 object-contain mb-2"
                 />
                 <span className="text-xs font-bold text-[#023047] uppercase">
-                  Electrimotos Zapatoca
+                  FactuPOS
                 </span>
                 <span className="text-[11px] text-slate-500">
                   Servicio Técnico y Repuestos
