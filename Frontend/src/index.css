@@ -1,0 +1,79 @@
+:root {
+  font-family: 'Inter', 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #1e293b;
+  background-color: #f1f5f9;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #f1f5f9;
+  color: #1e293b;
+}
+
+.blue {
+  background-color: #023047 !important;
+  color: #ffffff !important;
+  transition: all 0.2s ease-in-out;
+}
+.blue:hover {
+  background-color: #034c6e !important;
+  color: #ffb703 !important;
+}
+
+.button-Date {
+  background-color: #023047 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  transition: all 0.2s ease-in-out;
+}
+.button-Date:hover:not(:disabled) {
+  background-color: #fb8500 !important;
+  color: #ffffff !important;
+}
+.button-Date:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.custom-button {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.rojo {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  transition: all 0.2s ease-in-out;
+}
+.rojo:hover {
+  background-color: #b91c1c !important;
+  color: #ffffff !important;
+}
+
+.verde {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  transition: all 0.2s ease-in-out;
+}
+.verde:hover {
+  background-color: #047857 !important;
+  color: #ffffff !important;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+

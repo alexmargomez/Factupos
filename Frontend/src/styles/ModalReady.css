@@ -1,0 +1,19 @@
+.icon-check {
+    animation: changeColor 2s forwards;
+  }
+  
+  @keyframes changeColor {
+    to {
+      color: #49e646;
+    }
+  }
+
+.animate-border {
+    animation: border 2s forwards;
+  }
+  
+  @keyframes border {
+    to {
+      border-top: 3px solid #49e646;
+    }
+  }

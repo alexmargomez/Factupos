@@ -1,66 +1,87 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Factupos — Sistema POS, Facturación, Inventario y Taller
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Repositorio unificado (**Monorepo**) de **Factupos**, compuesto por el Frontend web moderno en React 19 y el Backend API RESTful en Laravel 11 con MariaDB, completamente contenerizado con Docker Compose.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Estructura del Proyecto
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+```text
+factuposAL/
+├── API_REST/               # Backend Laravel 11 (PHP 8.2 + Sanctum + SnappyPDF)
+│   ├── app/                # Modelos Eloquent y Controladores REST
+│   ├── database/           # Migraciones y Seeders iniciales
+│   ├── resources/views/    # Plantillas Blade para facturas PDF/HTML
+│   ├── routes/api.php      # Endpoints de la API REST
+│   ├── Dockerfile          # Imagen PHP 8.2 + Composer + wkhtmltopdf
+│   └── .env.example        # Variables de entorno del Backend
+├── Frontend/               # Frontend React 19 + Vite 6 + Tailwind CSS v4
+│   ├── src/
+│   │   ├── components/     # Componentes reutilizables, modales y visores PDF
+│   │   ├── screens/        # Vistas: Login, Dashboard, POS, Taller, Inventario, Consultas, Reportes
+│   │   └── services/       # Servicios de consulta API
+│   ├── Dockerfile          # Imagen Node 20 Alpine + Vite
+│   └── .env.example        # Variables de entorno del Frontend
+├── docker-compose.yml      # Orquestador de MariaDB 11.4 + API_REST + Frontend
+├── .env.example            # Variables globales para Docker Compose
+└── README.md               # Documentación general del proyecto
+```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## Despliegue Rápido con Docker Compose (Recomendado)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### 1. Configurar variables de entorno (opcional)
+```bash
+cp .env.example .env
+cp API_REST/.env.example API_REST/.env
+cp Frontend/.env.example Frontend/.env
+```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+### 2. Construir e iniciar los contenedores
+```bash
+docker compose up -d --build
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Al iniciar, Docker Compose levanta automáticamente los **3 servicios**:
+1. **`factupos-mariadb` (`db`)**: Base de datos **MariaDB 11.4** con `healthcheck` y persistencia en volumen (`3307:3306`).
+2. **`factupos-backend` (`API_REST`)**: Espera a que MariaDB esté lista, genera `APP_KEY`, ejecuta `php artisan migrate --force` y `php artisan db:seed --force`, y sirve la API en **`http://localhost:8000/api`**.
+3. **`factupos-frontend` (`Frontend`)**: Levanta la aplicación React 19 + Vite en **`http://localhost:5173`**.
 
-## Laravel Sponsors
+---
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Accesos por Defecto (Creados por el Seeder)
 
-### Premium Partners
+| Usuario | Contraseña | Rol |
+| :--- | :--- | :--- |
+| `admin` | `admin123` | `Admin` |
+| `Admin` | `123456` | `Admin` |
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+---
 
-## Contributing
+## Módulos Principales (`Frontend/`)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- **Facturación POS (`/sale`)**: Selección/creación rápida de clientes y vehículos, carga automática de servicios agendados, catálogo con control de stock, carrito POS con ajuste de cantidades (`+`/`-`), asignación de mecánico, método de pago e impresión inmediata de factura.
+- **Agendamiento de Taller (`/schedule`)**: Registro de citas pendientes con cliente, vehículo, mecánico asignado y listado de servicios.
+- **Gestión de Inventario (`/inventory`)**: Creación de productos con stock inicial y registro de entradas (`+`) y salidas (`-`) con trazabilidad.
+- **Consultas e Historiales (`/look`)**: Búsqueda y edición de Productos, Clientes (con historial de servicios), Vehículos (con historial por placa), Ventas (con visor y reimpresión de facturas), Pendientes y Movimientos de Inventario.
+- **Reportes y Cierre de Caja (`/report`)**: Indicadores financieros (Total Facturado, Repuestos, Mano de Obra), alertas de stock bajo y liquidación/reinicio diario por mecánico.
 
-## Code of Conduct
+---
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Endpoints Principales (`API_REST/`)
 
-## Security Vulnerabilities
+Todas las rutas bajo `/api` (excepto `/api/login`) están protegidas por `auth:sanctum`:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- `POST /api/login` / `POST /api/logout` — Autenticación Bearer Token
+- `GET|POST|PUT|DELETE /api/customers` — Gestión de clientes
+- `GET|POST|PUT|DELETE /api/vehicles` — Gestión de vehículos
+- `GET|POST|PUT|DELETE /api/products` — Catálogo de productos e inventario sincronizado
+- `GET|POST|PUT /api/inventory` — Control de existencias
+- `GET|POST|DELETE /api/inventory-movements` — Historial de entradas y salidas
+- `GET|POST|PUT|DELETE /api/sales` — Ventas POS con relaciones precargadas
+- `GET|POST|PUT|DELETE /api/sale-details` — Detalles de venta con descuento automático de stock
+- `GET|POST /api/services` — Mano de obra por venta, cliente o vehículo
+- `GET|POST|DELETE /api/invoices` y `GET /api/invoices/pdf/{id}` — Facturas y generación PDF/HTML
+- `GET|POST|PUT|DELETE /api/schedules` — Citas y agendamientos de taller
+- `GET|POST|PUT|DELETE /api/workers` — Mecánicos y acumulado diario (`totalDia`)
