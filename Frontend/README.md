@@ -40,23 +40,23 @@ cp .env.example .env
 Contenido de `.env.example`:
 
 ```env
-# URL base de la API REST del Backend (Laravel)
-VITE_API_URL="http://localhost:8000/api"
+# URL base de la API REST del Backend (usa /api con el proxy interno de Vite en Docker)
+VITE_API_URL="/api"
 ```
 
 ---
 
 ## Ejecución con Docker Compose (Recomendado)
 
-Desde el directorio raíz del proyecto (`factuposAL/`):
+Desde el directorio raíz del proyecto (`Factupos/`):
 
 ```bash
 docker compose up -d --build
 ```
 
 - **Frontend disponible en**: `http://localhost:5173`
-- **Backend API en**: `http://localhost:8000/api`
-- **Base de datos**: MariaDB 11.4 (puerto externo `3307`)
+- **Backend API en**: `http://localhost:7000/api`
+- **Base de datos**: MariaDB 11.4 (puerto externo `3309`)
 
 ---
 
