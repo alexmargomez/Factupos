@@ -37,6 +37,12 @@ EXPOSE ${BACKEND_PORT:-8000}
 CMD ["sh", "-c", "\
     if [ ! -f vendor/autoload.php ]; then composer install --no-interaction --prefer-dist; fi && \
     if [ ! -f .env ]; then cp .env.example .env; fi && \
+    sed -i \"s|^DB_CONNECTION=.*|DB_CONNECTION=${DB_CONNECTION:-mariadb}|\" .env && \
+    sed -i \"s|^DB_HOST=.*|DB_HOST=factupos-mariadb|\" .env && \
+    sed -i \"s|^DB_PORT=.*|DB_PORT=3306|\" .env && \
+    sed -i \"s|^DB_DATABASE=.*|DB_DATABASE=${DB_DATABASE:-factupos}|\" .env && \
+    sed -i \"s|^DB_USERNAME=.*|DB_USERNAME=${DB_USERNAME:-factupos_user}|\" .env && \
+    sed -i \"s|^DB_PASSWORD=.*|DB_PASSWORD=${DB_PASSWORD:-factupos_pass}|\" .env && \
     grep -q '^APP_KEY=base64:' .env || php artisan key:generate --force && \
     php artisan config:clear && \
     until php artisan migrate --force; do echo 'Esperando a MariaDB...'; sleep 3; done && \
