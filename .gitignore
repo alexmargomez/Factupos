@@ -1,23 +1,31 @@
-/.phpunit.cache
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
+# Entornos locales
 .env
-.env.backup
-.env.production
-.phpactor.json
+.env.local
+.env.*.local
+!.env.example
+
+# Dependencias y compilados
+node_modules/
+vendor/
+dist/
+build/
+public/build/
+public/hot
+public/storage
+
+# Archivos de Laravel / Backend
+API_REST/storage/*.key
+API_REST/storage/logs/*.log
+API_REST/storage/framework/cache/*
+API_REST/storage/framework/sessions/*
+API_REST/storage/framework/views/*
+API_REST/database/*.sqlite
+API_REST/database/*.sqlite-journal
 .phpunit.result.cache
-Homestead.json
-Homestead.yaml
-npm-debug.log
-yarn-error.log
-/auth.json
-/.fleet
-/.idea
-/.nova
-/.vscode
-/.zed
+
+# Editores y Sistema Operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
