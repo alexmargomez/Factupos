@@ -47,7 +47,7 @@ El contenedor `factupos-backend` realizará automáticamente:
 2. Creación del archivo `.env` a partir de `.env.example` y generación de `APP_KEY`.
 3. Espera activa a que el servicio **MariaDB (`db`)** esté saludable (`service_healthy`).
 4. Ejecución automática de migraciones (`php artisan migrate --force`) y seeders (`php artisan db:seed --force`).
-5. Exposición de la API en `http://localhost:8000/api`.
+5. Exposición de la API en `http://localhost:7000/api` (según `BACKEND_PORT`).
 
 ---
 
@@ -61,10 +61,11 @@ APP_ENV=local
 APP_KEY=
 APP_DEBUG=true
 APP_TIMEZONE=America/Bogota
-APP_URL=http://localhost:8000
+BACKEND_PORT=7000
+APP_URL=http://localhost:${BACKEND_PORT}
 
 DB_CONNECTION=mariadb
-DB_HOST=db
+DB_HOST=factupos-mariadb
 DB_PORT=3306
 DB_DATABASE=factupos
 DB_USERNAME=factupos_user
