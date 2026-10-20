@@ -2,26 +2,27 @@ import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import FactuposLogo from '../assets/factupos.svg';
 import FactuPrint from './FactuPrint';
-import { FaFileInvoice, FaPrint, FaTimes, FaUser, FaMotorcycle } from 'react-icons/fa';
+import { FaFileInvoice, FaPrint, FaTimes, FaUser, FaMotorcycle, FaWhatsapp } from 'react-icons/fa';
 
-const FactuView = ({ id, customerID, vehicleID, total, saleItem }) => {
+const FactuView = ({ id, customerID, vehicleID, total, saleItem, saleData }) => {
+  const initialSale = saleItem || saleData;
   const token = localStorage.getItem('authToken');
   const API_URL = import.meta.env.VITE_API_URL;
 
-  const [factura, setFactura] = useState(saleItem?.invoice || null);
-  const [customer, setCustomer] = useState(saleItem?.customer || null);
-  const [vehicle, setVehicle] = useState(saleItem?.vehicle || null);
-  const [saleDetails, setSaleDetails] = useState(saleItem?.sale_details || saleItem?.saleDetails || []);
-  const [services, setServices] = useState(saleItem?.services || []);
+  const [factura, setFactura] = useState(initialSale?.invoice || null);
+  const [customer, setCustomer] = useState(initialSale?.customer || null);
+  const [vehicle, setVehicle] = useState(initialSale?.vehicle || null);
+  const [saleDetails, setSaleDetails] = useState(initialSale?.sale_details || initialSale?.saleDetails || []);
+  const [services, setServices] = useState(initialSale?.services || []);
   const [products, setProducts] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [printTrigger, setPrintTrigger] = useState(null);
 
-  // Solo si no vino el objeto invoice pre-cargado en saleItem, obtenemos el número de factura ligero
+  // Solo si no vino el objeto invoice pre-cargado en initialSale, obtenemos el número de factura ligero
   useEffect(() => {
-    if (saleItem?.invoice) {
-      setFactura(saleItem.invoice);
+    if (initialSale?.invoice) {
+      setFactura(initialSale.invoice);
       return;
     }
     let isMounted = true;
@@ -50,7 +51,7 @@ const FactuView = ({ id, customerID, vehicleID, total, saleItem }) => {
     return () => {
       isMounted = false;
     };
-  }, [id, saleItem, API_URL, token]);
+  }, [id, initialSale, API_URL, token]);
 
   // Cargar detalles adicionales ÚNICAMENTE cuando el usuario abre el modal
   useEffect(() => {
@@ -151,6 +152,41 @@ const FactuView = ({ id, customerID, vehicleID, total, saleItem }) => {
     (sum, item) => sum + (Number(item.price) || 0),
     0
   );
+
+  const sendInvoiceWhatsApp = () => {
+    const rawPhone = String(customer?.phone || '').replace(/\D/g, '');
+    if (!rawPhone) {
+      window.alert('Este cliente no tiene un número de teléfono/WhatsApp registrado.');
+      return;
+    }
+    const phone = rawPhone.length === 10 ? `57${rawPhone}` : rawPhone;
+    const custName = customer?.name || 'Cliente';
+    const vehInfo = vehicle?.plate ? ` (${vehicle.plate} - ${vehicle.make} ${vehicle.model})` : '';
+
+    let msg = `Hola *${custName}*, adjuntamos el resumen de tu factura *${invoiceLabel}* en *FactuPOS*${vehInfo}:\n\n`;
+    if (services.length > 0) {
+      msg += `🔧 *Servicios ($ ${formatPrice(subtotalServicios)}):*\n`;
+      services.forEach((s) => {
+        msg += `• ${s.date}: $ ${formatPrice(s.price)}\n`;
+      });
+      msg += `\n`;
+    }
+    if (saleDetails.length > 0) {
+      msg += `📦 *Repuestos / Productos ($ ${formatPrice(subtotalProductos)}):*\n`;
+      saleDetails.forEach((d) => {
+        const pName = d.product?.name || products[d.product_id] || `Producto #${d.product_id}`;
+        msg += `• ${d.quantity}x ${pName}: $ ${formatPrice(d.price_total)}\n`;
+      });
+      msg += `\n`;
+    }
+    msg += `💰 *TOTAL FACTURADO: $ ${formatPrice(total)}*\n\n¡Gracias por tu compra!`;
+
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  };
 
   return (
     <>
@@ -357,7 +393,17 @@ const FactuView = ({ id, customerID, vehicleID, total, saleItem }) => {
               </span>
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={sendInvoiceWhatsApp}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition shadow-sm"
+                title="Enviar resumen de factura por WhatsApp"
+              >
+                <FaWhatsapp className="text-base" />
+                <span>Enviar WhatsApp</span>
+              </button>
+
               {factura?.id && (
                 <button
                   type="button"

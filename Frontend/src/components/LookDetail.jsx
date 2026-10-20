@@ -3,7 +3,15 @@ import FactuView from "./FactuView";
 import Modalmini from "./Modalmini";
 import ReportCustomer from "./ReportCustomer";
 import ReportVehicle from "./ReportVehicle";
-import { FaEdit, FaTrash, FaArrowUp, FaArrowDown } from "react-icons/fa";
+import { FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaWhatsapp } from "react-icons/fa";
+
+const WORKSHOP_STATUS_OPTIONS = [
+  "Recibido",
+  "En Diagnóstico",
+  "Esperando Repuesto",
+  "En Reparación",
+  "Listo para Entrega",
+];
 
 const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   const API_URL = import.meta.env.VITE_API_URL;
@@ -31,6 +39,10 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     make: "",
     model: "",
     customer_id: "",
+    current_mileage: "",
+    next_oil_change_km: "",
+    soat_due_date: "",
+    tecno_due_date: "",
   });
 
   const parseServicios = (serviciosRaw) => {
@@ -259,6 +271,16 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
         make: item.make || "",
         model: item.model || "",
         customer_id: item.customer_id || "",
+        current_mileage:
+          item.current_mileage != null ? String(item.current_mileage) : "",
+        next_oil_change_km:
+          item.next_oil_change_km != null ? String(item.next_oil_change_km) : "",
+        soat_due_date: item.soat_due_date
+          ? String(item.soat_due_date).slice(0, 10)
+          : "",
+        tecno_due_date: item.tecno_due_date
+          ? String(item.tecno_due_date).slice(0, 10)
+          : "",
       });
     }
     setIsModalOpen(true);
@@ -344,6 +366,22 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
 
   const handleSaveVehicle = async () => {
     try {
+      const payload = {
+        plate: vehicleUpdate.plate,
+        make: vehicleUpdate.make,
+        model: vehicleUpdate.model,
+        customer_id: vehicleUpdate.customer_id || undefined,
+        current_mileage:
+          vehicleUpdate.current_mileage !== ""
+            ? Number(vehicleUpdate.current_mileage)
+            : null,
+        next_oil_change_km:
+          vehicleUpdate.next_oil_change_km !== ""
+            ? Number(vehicleUpdate.next_oil_change_km)
+            : null,
+        soat_due_date: vehicleUpdate.soat_due_date || null,
+        tecno_due_date: vehicleUpdate.tecno_due_date || null,
+      };
       const response = await fetch(`${API_URL}/vehicles/${vehicleUpdate.id}`, {
         method: "PUT",
         headers: {
@@ -351,7 +389,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
-        body: JSON.stringify(vehicleUpdate),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -361,6 +399,88 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     } catch (err) {
       console.error("Error al actualizar vehículo:", err);
     }
+  };
+
+  const handleUpdateScheduleStatus = async (item, nextStatus) => {
+    try {
+      const response = await fetch(`${API_URL}/schedules/${item.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          workshop_status: nextStatus,
+        }),
+      });
+      if (response.ok) {
+        setData((prev) =>
+          prev.map((row) =>
+            row.id === item.id ? { ...row, workshop_status: nextStatus } : row
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Error actualizando estado de orden:", err);
+    }
+  };
+
+  const notifyOrderWhatsApp = (item) => {
+    const rawPhone = String(item.customer?.phone || "").replace(/\D/g, "");
+    if (!rawPhone) {
+      window.alert("Este cliente no tiene un número de teléfono/WhatsApp registrado.");
+      return;
+    }
+    const phone = rawPhone.length === 10 ? `57${rawPhone}` : rawPhone;
+    const status = item.workshop_status || "Recibido";
+    const servicesText =
+      item.serviciosList && item.serviciosList.length > 0
+        ? item.serviciosList.join(", ")
+        : "Mantenimiento general";
+    let msg = `Hola *${item.customerName}*, te escribimos de *FactuPOS Taller*.\n\n`;
+    if (status === "Listo para Entrega") {
+      msg += `✅ Tu vehículo placa *${item.vehiclePlate}* ya se encuentra *LISTO PARA ENTREGA*.\n`;
+    } else {
+      msg += `🔧 El estado actual de tu vehículo placa *${item.vehiclePlate}* en el taller es: *${status}*.\n`;
+    }
+    msg += `📋 *Servicios:* ${servicesText}\n\n¡Gracias por confiar en nosotros!`;
+
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  const notifyVehicleReminderWhatsApp = (item) => {
+    const rawPhone = String(item.customer?.phone || "").replace(/\D/g, "");
+    if (!rawPhone) {
+      window.alert("El propietario no tiene un número de teléfono/WhatsApp registrado.");
+      return;
+    }
+    const phone = rawPhone.length === 10 ? `57${rawPhone}` : rawPhone;
+    const ownerName = item.customer?.name || "Cliente";
+    let msg = `Hola *${ownerName}*, te saludamos de *FactuPOS Taller*.\n\nTe enviamos el recordatorio preventivo para tu vehículo *${item.make} ${item.model}* placa *${item.plate}*:\n`;
+    if (item.current_mileage) {
+      msg += `• Kilometraje registrado: ${Number(item.current_mileage).toLocaleString("es-CO")} km\n`;
+    }
+    if (item.next_oil_change_km) {
+      msg += `• Próximo cambio de aceite sugerido: ${Number(item.next_oil_change_km).toLocaleString("es-CO")} km\n`;
+    }
+    if (item.soat_due_date) {
+      msg += `• Vencimiento SOAT: ${String(item.soat_due_date).slice(0, 10)}\n`;
+    }
+    if (item.tecno_due_date) {
+      msg += `• Vencimiento Tecnomecánica: ${String(item.tecno_due_date).slice(0, 10)}\n`;
+    }
+    msg += `\nAgenda tu cita con nosotros cuando lo necesites.`;
+
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
 
   const formatPrice = (price) => {
@@ -684,6 +804,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
 
   // 3. VEHÍCULOS
   if (selectedOption === "Vehiculos") {
+    const todayStr = new Date().toISOString().split("T")[0];
     return (
       <div className="w-full">
         <table className="w-full text-sm text-left border-collapse">
@@ -691,59 +812,150 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
               <th className="py-3 px-4 text-center">Historial</th>
               <th className="py-3 px-4">Placa</th>
-              <th className="py-3 px-4">Marca</th>
-              <th className="py-3 px-4">Modelo / Línea</th>
+              <th className="py-3 px-4">Marca / Línea</th>
               <th className="py-3 px-4">Propietario</th>
+              <th className="py-3 px-4">Km / Próx. Aceite</th>
+              <th className="py-3 px-4">SOAT / Tecnomecánica</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredData.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4 text-center">
-                  <div className="flex justify-center">
-                    <ReportVehicle
-                      id={item.id}
-                      plate={item.plate}
-                      make={item.make}
-                      model={item.model}
-                      idCustomer={item.customer_id}
-                      ownerName={item.customer?.name}
-                    />
-                  </div>
-                </td>
-                <td className="py-3 px-4">
-                  <span className="inline-block bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded font-mono text-xs font-extrabold border border-amber-300">
-                    {item.plate}
-                  </span>
-                </td>
-                <td className="py-3 px-4 font-semibold text-slate-800">
-                  {item.make}
-                </td>
-                <td className="py-3 px-4 text-slate-600">{item.model}</td>
-                <td className="py-3 px-4 text-slate-600">
-                  {item.customer?.name || `Cliente #${item.customer_id}`}
-                </td>
-                <td className="py-3 px-4">
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openModal(item)}
-                      className="blue flex items-center gap-1 text-xs py-1.5 px-3"
-                    >
-                      <FaEdit /> Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(item.id)}
-                      className="rojo flex items-center gap-1 text-xs py-1.5 px-3"
-                    >
-                      <FaTrash /> Eliminar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filteredData.map((item) => {
+              const oilOverdue =
+                item.current_mileage != null &&
+                item.next_oil_change_km != null &&
+                Number(item.current_mileage) >= Number(item.next_oil_change_km);
+              const soatExpired =
+                item.soat_due_date && item.soat_due_date < todayStr;
+              const tecnoExpired =
+                item.tecno_due_date && item.tecno_due_date < todayStr;
+
+              return (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex justify-center">
+                      <ReportVehicle
+                        id={item.id}
+                        plate={item.plate}
+                        make={item.make}
+                        model={item.model}
+                        idCustomer={item.customer_id}
+                        ownerName={item.customer?.name}
+                      />
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="inline-block bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded font-mono text-xs font-extrabold border border-amber-300">
+                      {item.plate}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <p className="font-semibold text-slate-800">{item.make}</p>
+                    <p className="text-xs text-slate-500">{item.model}</p>
+                  </td>
+                  <td className="py-3 px-4 text-slate-600">
+                    <p className="font-medium text-slate-700">
+                      {item.customer?.name || `Cliente #${item.customer_id}`}
+                    </p>
+                    {item.customer?.phoneNumber && (
+                      <p className="text-xs text-slate-400">
+                        Tel: {item.customer.phoneNumber}
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    {item.current_mileage != null ||
+                    item.next_oil_change_km != null ? (
+                      <div className="space-y-1 text-xs">
+                        <p className="text-slate-700">
+                          Actual:{" "}
+                          <span className="font-bold">
+                            {item.current_mileage != null
+                              ? `${formatPrice(item.current_mileage)} km`
+                              : "—"}
+                          </span>
+                        </p>
+                        {item.next_oil_change_km != null && (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full font-bold ${
+                              oilOverdue
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            {oilOverdue ? "⚠️ " : "🛢️ "}
+                            Próx: {formatPrice(item.next_oil_change_km)} km
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">Sin registro</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="space-y-1 text-xs">
+                      {item.soat_due_date ? (
+                        <div>
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded font-semibold ${
+                              soatExpired
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            SOAT: {item.soat_due_date}
+                            {soatExpired ? " (Vencido)" : ""}
+                          </span>
+                        </div>
+                      ) : null}
+                      {item.tecno_due_date ? (
+                        <div>
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded font-semibold ${
+                              tecnoExpired
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            Tecno: {item.tecno_due_date}
+                            {tecnoExpired ? " (Vencida)" : ""}
+                          </span>
+                        </div>
+                      ) : null}
+                      {!item.soat_due_date && !item.tecno_due_date && (
+                        <span className="text-slate-400">Sin fechas</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => notifyVehicleReminderWhatsApp(item)}
+                        title="Enviar recordatorio de mantenimiento / documentos por WhatsApp"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 text-xs py-1.5 px-2.5 font-bold transition-colors cursor-pointer"
+                      >
+                        <FaWhatsapp /> Recordar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openModal(item)}
+                        className="blue flex items-center gap-1 text-xs py-1.5 px-2.5"
+                      >
+                        <FaEdit /> Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.id)}
+                        className="rojo flex items-center gap-1 text-xs py-1.5 px-2.5"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
@@ -754,48 +966,108 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                 Modificar Vehículo ({vehicleUpdate.plate})
               </h2>
               <p className="text-xs text-slate-500">
-                Actualiza la placa, marca o línea del vehículo
+                Actualiza datos básicos, kilometraje y vencimientos de ley
               </p>
             </div>
 
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Placa
-                </label>
-                <input
-                  type="text"
-                  name="plate"
-                  value={vehicleUpdate.plate}
-                  onChange={handleChangeVehicle}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Placa
+                  </label>
+                  <input
+                    type="text"
+                    name="plate"
+                    value={vehicleUpdate.plate}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Marca
+                  </label>
+                  <input
+                    type="text"
+                    name="make"
+                    value={vehicleUpdate.make}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Modelo / Línea
+                  </label>
+                  <input
+                    type="text"
+                    name="model"
+                    value={vehicleUpdate.model}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Marca
-                </label>
-                <input
-                  type="text"
-                  name="make"
-                  value={vehicleUpdate.make}
-                  onChange={handleChangeVehicle}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Kilometraje Actual (km)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    name="current_mileage"
+                    value={vehicleUpdate.current_mileage}
+                    onChange={handleChangeVehicle}
+                    placeholder="Ej: 45000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Modelo / Línea
-                </label>
-                <input
-                  type="text"
-                  name="model"
-                  value={vehicleUpdate.model}
-                  onChange={handleChangeVehicle}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
-                />
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Próximo Cambio Aceite (km)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    name="next_oil_change_km"
+                    value={vehicleUpdate.next_oil_change_km}
+                    onChange={handleChangeVehicle}
+                    placeholder="Ej: 48000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Vencimiento SOAT
+                  </label>
+                  <input
+                    type="date"
+                    name="soat_due_date"
+                    value={vehicleUpdate.soat_due_date}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Vencimiento Tecnomecánica
+                  </label>
+                  <input
+                    type="date"
+                    name="tecno_due_date"
+                    value={vehicleUpdate.tecno_due_date}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
               </div>
             </div>
 
@@ -895,7 +1167,8 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
               <th className="py-3 px-4">Cliente</th>
               <th className="py-3 px-4">Vehículo</th>
               <th className="py-3 px-4">Mecánico</th>
-              <th className="py-3 px-4">Servicios Solicitados</th>
+              <th className="py-3 px-4">Estado Taller</th>
+              <th className="py-3 px-4">Servicios / Recepción</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
           </thead>
@@ -906,14 +1179,39 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   {formatDateTime(item.created_at)}
                 </td>
                 <td className="py-3 px-4 font-semibold text-slate-800">
-                  {item.customerName}
+                  <p>{item.customerName}</p>
+                  {item.customerPhone && (
+                    <p className="text-xs text-slate-400 font-normal">
+                      Tel: {item.customerPhone}
+                    </p>
+                  )}
                 </td>
                 <td className="py-3 px-4">
                   <span className="inline-block bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded font-mono text-xs font-bold border border-amber-300">
                     {item.vehiclePlate}
                   </span>
+                  {item.mileage != null && (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {formatPrice(item.mileage)} km
+                    </p>
+                  )}
                 </td>
                 <td className="py-3 px-4 text-slate-600">{item.workerName}</td>
+                <td className="py-3 px-4">
+                  <select
+                    value={item.workshop_status || "Recibido"}
+                    onChange={(e) =>
+                      handleUpdateScheduleStatus(item.id, e.target.value)
+                    }
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-[#023047] focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  >
+                    {WORKSHOP_STATUS_OPTIONS.map((statusOpt) => (
+                      <option key={statusOpt} value={statusOpt}>
+                        {statusOpt}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 <td className="py-3 px-4">
                   {item.serviciosList && item.serviciosList.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
@@ -929,15 +1227,30 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   ) : (
                     <span className="text-slate-400 text-xs">Sin especificar</span>
                   )}
+                  {item.notes && (
+                    <p className="text-xs text-slate-500 italic mt-1">
+                      Nota: {item.notes}
+                    </p>
+                  )}
                 </td>
                 <td className="py-3 px-4 text-center">
-                  <button
-                    type="button"
-                    className="rojo flex items-center gap-1 text-xs py-1.5 px-3 mx-auto"
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <FaTrash /> Eliminar
-                  </button>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => notifyOrderWhatsApp(item)}
+                      title="Notificar estado de la orden por WhatsApp"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 text-xs py-1.5 px-2.5 font-bold transition-colors cursor-pointer"
+                    >
+                      <FaWhatsapp /> Avisar
+                    </button>
+                    <button
+                      type="button"
+                      className="rojo flex items-center gap-1 text-xs py-1.5 px-2.5"
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      <FaTrash />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

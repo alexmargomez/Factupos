@@ -15,6 +15,9 @@ class Schedule extends Model
         'customer_id',
         'vehicle_id',
         'state',
+        'workshop_status',
+        'mileage',
+        'notes',
         'worker_id',
     ];
 
