@@ -10,7 +10,17 @@ class Sale extends Model
     use HasFactory;
     
     protected $table = 'Sales';
-    protected $fillable = ['customer_id', 'vehicle_id', 'total', 'payment_method', 'worker_id'];
+    protected $fillable = [
+        'customer_id',
+        'vehicle_id',
+        'total',
+        'payment_method',
+        'payment_status',
+        'paid_amount',
+        'pending_balance',
+        'payment_notes',
+        'worker_id',
+    ];
 
     public function customer()
     {

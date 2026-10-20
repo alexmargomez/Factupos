@@ -384,13 +384,41 @@ const FactuView = ({ id, customerID, vehicleID, total, saleItem, saleData }) => 
 
           {/* Pie del Modal: Total y Acciones */}
           <div className="px-6 py-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
-            <div className="flex items-baseline gap-2">
-              <span className="text-sm font-bold uppercase text-slate-500">
-                Total Facturado:
-              </span>
-              <span className="text-2xl sm:text-3xl font-black text-[#023047]">
-                $ {formatPrice(total)}
-              </span>
+            <div className="flex flex-col gap-1 w-full sm:w-auto">
+              <div className="flex flex-wrap items-baseline gap-2.5">
+                <span className="text-sm font-bold uppercase text-slate-500">
+                  Total Facturado:
+                </span>
+                <span className="text-2xl sm:text-3xl font-black text-[#023047]">
+                  $ {formatPrice(total)}
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${
+                    Number(initialSale?.pending_balance || 0) > 0
+                      ? 'bg-rose-100 text-rose-700 border-rose-300'
+                      : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  }`}
+                >
+                  {Number(initialSale?.pending_balance || 0) > 0
+                    ? `Saldo Pendiente: $ ${formatPrice(initialSale.pending_balance)}`
+                    : initialSale?.payment_status || 'Pagado'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <span>
+                  Medio: <strong className="text-slate-700">{initialSale?.payment_method || 'Efectivo'}</strong>
+                </span>
+                {initialSale?.paid_amount != null && Number(initialSale?.pending_balance || 0) > 0 && (
+                  <span>
+                    Abonado: <strong className="text-emerald-700">$ {formatPrice(initialSale.paid_amount)}</strong>
+                  </span>
+                )}
+                {initialSale?.payment_notes && (
+                  <span className="italic text-slate-600">
+                    ({initialSale.payment_notes})
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">

@@ -15,6 +15,8 @@ import {
   FaFileInvoiceDollar,
   FaUserTie,
   FaMoneyBillWave,
+  FaPrint,
+  FaWhatsapp,
 } from 'react-icons/fa';
 
 const Sale = () => {
@@ -33,6 +35,11 @@ const Sale = () => {
   const [serviceValue, setServiceValue] = useState('');
   const [activeTab, setActiveTab] = useState('producto');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  const [cashReceived, setCashReceived] = useState('');
+  const [mixedCash, setMixedCash] = useState('');
+  const [mixedTransfer, setMixedTransfer] = useState('');
+  const [initialAbono, setInitialAbono] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
   const [total, setTotal] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -164,7 +171,163 @@ const Sale = () => {
     setProductsDate([]);
     setServices([]);
     setServicesDate([]);
+    setCashReceived('');
+    setMixedCash('');
+    setMixedTransfer('');
+    setInitialAbono('');
+    setPaymentNotes('');
     setFormError('');
+  };
+
+  // Imprimir Cotización / Presupuesto sin descontar stock ni guardar venta
+  const handlePrintQuote = () => {
+    setFormError('');
+    if (productsDate.length === 0 && services.length === 0) {
+      setFormError('Agrega al menos un producto o servicio para generar la cotización.');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=850,height=700');
+    if (!printWindow) {
+      setFormError('Por favor habilita las ventanas emergentes para imprimir la cotización.');
+      return;
+    }
+
+    const clientName = clientValues.name?.trim() || 'Cliente General (Mostrador)';
+    const clientPhone = clientValues.phone?.trim() || 'N/A';
+    const plate = vehicleValues.plate?.trim() ? vehicleValues.plate.trim().toUpperCase() : 'N/A';
+    const vehicleDesc =
+      vehicleValues.make || vehicleValues.model
+        ? `${vehicleValues.make || ''} ${vehicleValues.model || ''}`.trim()
+        : 'N/A';
+    const dateStr = new Date().toLocaleString('es-CO');
+
+    const rowsHtml = [
+      ...productsDate.map(
+        (p) => `
+          <tr>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;">Repuesto</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-weight:600;">${p.name}</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:center;">${p.und}</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;">$ ${formatPrice(p.price)}</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;">$ ${formatPrice(p.total)}</td>
+          </tr>`
+      ),
+      ...services.map(
+        (s) => `
+          <tr>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;">Mano de Obra</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-weight:600;">${s.date}</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:center;">1</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;">$ ${formatPrice(s.price)}</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;">$ ${formatPrice(s.price)}</td>
+          </tr>`
+      ),
+    ].join('');
+
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Cotización - ${clientName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #0f172a; margin: 28px; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #023047; padding-bottom: 14px; margin-bottom: 18px; }
+          .title { font-size: 22px; font-weight: 800; color: #023047; margin: 0; }
+          .badge { background: #ffb703; color: #023047; padding: 5px 12px; border-radius: 6px; font-weight: 800; font-size: 13px; }
+          .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 18px; font-size: 13px; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 18px; }
+          th { background: #023047; color: #fff; padding: 9px 8px; text-align: left; text-transform: uppercase; font-size: 11px; }
+          .totals { text-align: right; font-size: 15px; margin-top: 10px; }
+          .grand-total { font-size: 20px; font-weight: 900; color: #023047; margin-top: 6px; }
+          .note { margin-top: 26px; font-size: 12px; color: #64748b; border-top: 1px dashed #cbd5e1; padding-top: 10px; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1 class="title">FACTUPOS — TALLER Y REPUESTOS</h1>
+            <div style="font-size:12px;color:#475569;margin-top:4px;">Fecha de emisión: ${dateStr}</div>
+          </div>
+          <div class="badge">COTIZACIÓN / PRESUPUESTO</div>
+        </div>
+        <div class="meta">
+          <div><strong>Cliente:</strong> ${clientName}<br/><strong>Teléfono:</strong> ${clientPhone}</div>
+          <div><strong>Placa Vehículo:</strong> ${plate}<br/><strong>Marca / Línea:</strong> ${vehicleDesc}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Descripción</th>
+              <th style="text-align:center;">Cant.</th>
+              <th style="text-align:right;">V. Unitario</th>
+              <th style="text-align:right;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal Repuestos: <strong>$ ${formatPrice(subtotalProducts)}</strong></div>
+          <div>Subtotal Mano de Obra: <strong>$ ${formatPrice(subtotalServices)}</strong></div>
+          <div class="grand-total">TOTAL PRESUPUESTO: $ ${formatPrice(total)}</div>
+        </div>
+        <div class="note">
+          Este documento es una cotización informativa y no constituye factura de venta ni reserva de inventario. Validez sujeta a disponibilidad de repuestos.
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 350);
+  };
+
+  // Enviar Cotización por WhatsApp sin descontar stock
+  const handleWhatsAppQuote = () => {
+    setFormError('');
+    if (productsDate.length === 0 && services.length === 0) {
+      setFormError('Agrega al menos un producto o servicio para enviar la cotización.');
+      return;
+    }
+
+    const rawPhone = (clientValues.phone || '').replace(/\D/g, '');
+    const normalizedPhone =
+      rawPhone.length === 10 ? `57${rawPhone}` : rawPhone;
+
+    const lines = [
+      `Hola *${clientValues.name?.trim() || 'Cliente'}*, te compartimos la *Cotización / Presupuesto* del taller:`,
+      vehicleValues.plate
+        ? `🏍️ *Vehículo:* ${vehicleValues.plate.toUpperCase()} ${vehicleValues.make || ''} ${vehicleValues.model || ''}`
+        : null,
+      productsDate.length > 0
+        ? `📦 *Repuestos ($ ${formatPrice(subtotalProducts)}):*\n` +
+          productsDate
+            .map((p) => `  • ${p.name} (x${p.und}): $ ${formatPrice(p.total)}`)
+            .join('\n')
+        : null,
+      services.length > 0
+        ? `🔧 *Mano de Obra ($ ${formatPrice(subtotalServices)}):*\n` +
+          services
+            .map((s) => `  • ${s.date}: $ ${formatPrice(s.price)}`)
+            .join('\n')
+        : null,
+      `💰 *TOTAL COTIZADO:* $ ${formatPrice(total)}`,
+      `Quedamos atentos a tu confirmación para iniciar el trabajo.`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const url = normalizedPhone
+      ? `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(lines)}`
+      : `https://wa.me/?text=${encodeURIComponent(lines)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   // Creación de Factura, Venta, Detalles y Servicios
@@ -179,6 +342,40 @@ const Sale = () => {
     if (productsDate.length === 0 && services.length === 0) {
       setFormError('Agrega al menos un producto o servicio a la factura.');
       return;
+    }
+
+    // Cálculo de montos según modalidad de pago
+    let computedPaidAmount = total;
+    let computedPendingBalance = 0;
+    let computedStatus = 'Pagado';
+    let computedNotes = paymentNotes.trim() || null;
+
+    if (paymentMethod === 'Pago Mixto') {
+      const cashPart = Math.max(0, parseInt(mixedCash, 10) || 0);
+      const transferPart = Math.max(0, parseInt(mixedTransfer, 10) || 0);
+      if (cashPart + transferPart <= 0) {
+        setFormError('En Pago Mixto ingresa los montos de Efectivo y/o Transferencia.');
+        return;
+      }
+      computedPaidAmount = Math.min(total, cashPart + transferPart);
+      computedPendingBalance = Math.max(0, total - computedPaidAmount);
+      computedStatus = computedPendingBalance <= 0 ? 'Pagado' : 'Abono Parcial';
+      computedNotes = `Efectivo: $ ${formatPrice(cashPart)} + Transf/Tarjeta: $ ${formatPrice(transferPart)}${
+        paymentNotes.trim() ? ` (${paymentNotes.trim()})` : ''
+      }`;
+    } else if (paymentMethod === 'Crédito / Abono') {
+      const abonoPart = Math.max(0, parseInt(initialAbono, 10) || 0);
+      computedPaidAmount = Math.min(total, abonoPart);
+      computedPendingBalance = Math.max(0, total - computedPaidAmount);
+      computedStatus =
+        computedPendingBalance <= 0
+          ? 'Pagado'
+          : computedPaidAmount > 0
+          ? 'Abono Parcial'
+          : 'Pendiente / Crédito';
+      if (abonoPart > 0 && !computedNotes) {
+        computedNotes = `Abono inicial: $ ${formatPrice(abonoPart)}`;
+      }
     }
 
     setIsSubmitting(true);
@@ -304,6 +501,10 @@ const Sale = () => {
           worker_id: worker ? Number(worker) : null,
           total: total,
           payment_method: paymentMethod,
+          payment_status: computedStatus,
+          paid_amount: computedPaidAmount,
+          pending_balance: computedPendingBalance,
+          payment_notes: computedNotes,
         }),
       });
 
@@ -509,7 +710,7 @@ const Sale = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 text-sm font-bold text-[#023047]">
                 <FaMoneyBillWave className="text-emerald-600" />
                 <span>Método de Pago:</span>
@@ -522,9 +723,101 @@ const Sale = () => {
                 <option value="Efectivo">Efectivo</option>
                 <option value="Transferencia / Nequi">Transferencia / Nequi</option>
                 <option value="Tarjeta">Tarjeta</option>
+                <option value="Pago Mixto">Pago Mixto (Efectivo + Transf.)</option>
+                <option value="Crédito / Abono">Crédito / Abono (Cuenta por Cobrar)</option>
               </select>
+
+              {paymentMethod === 'Efectivo' && total > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Recibido ($)"
+                    value={cashReceived}
+                    onChange={(e) => setCashReceived(e.target.value)}
+                    className="w-32 px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-800 font-bold"
+                  />
+                  {Number(cashReceived) >= total && (
+                    <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-lg font-extrabold border border-emerald-300">
+                      Cambio: $ {formatPrice(Number(cashReceived) - total)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Panel condicional para Pago Mixto o Crédito / Abono */}
+          {(paymentMethod === 'Pago Mixto' || paymentMethod === 'Crédito / Abono') && (
+            <div className="bg-amber-50/70 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              {paymentMethod === 'Pago Mixto' ? (
+                <div className="flex flex-wrap items-center gap-3 w-full">
+                  <span className="text-xs font-extrabold uppercase text-amber-900">
+                    Desglose Pago Mixto:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Efectivo $:</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Ej. 50000"
+                      value={mixedCash}
+                      onChange={(e) => setMixedCash(e.target.value)}
+                      className="w-32 px-2.5 py-1.5 text-xs border border-amber-300 rounded-lg bg-white font-bold text-slate-800"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Transf. / Tarjeta $:</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Ej. 30000"
+                      value={mixedTransfer}
+                      onChange={(e) => setMixedTransfer(e.target.value)}
+                      className="w-32 px-2.5 py-1.5 text-xs border border-amber-300 rounded-lg bg-white font-bold text-slate-800"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Referencia o nota opcional..."
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    className="flex-1 min-w-[180px] px-2.5 py-1.5 text-xs border border-amber-300 rounded-lg bg-white text-slate-700"
+                  />
+                  <span className="text-xs font-extrabold text-[#023047] ml-auto">
+                    Suma: $ {formatPrice((parseInt(mixedCash, 10) || 0) + (parseInt(mixedTransfer, 10) || 0))} / Total: $ {formatPrice(total)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3 w-full">
+                  <span className="text-xs font-extrabold uppercase text-amber-900">
+                    Venta a Crédito / Abono:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Abono Inicial ($):</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0 si queda todo a crédito"
+                      value={initialAbono}
+                      onChange={(e) => setInitialAbono(e.target.value)}
+                      className="w-40 px-2.5 py-1.5 text-xs border border-amber-300 rounded-lg bg-white font-bold text-slate-800"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Observación de crédito o fecha de pago..."
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    className="flex-1 min-w-[180px] px-2.5 py-1.5 text-xs border border-amber-300 rounded-lg bg-white text-slate-700"
+                  />
+                  <span className="bg-rose-100 text-rose-800 px-3 py-1 rounded-lg text-xs font-extrabold border border-rose-300 ml-auto">
+                    Saldo Pendiente por Cobrar: $ {formatPrice(Math.max(0, total - (parseInt(initialAbono, 10) || 0)))}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Sección 2: Catálogo (Izquierda) y Carrito de Facturación (Derecha) */}
@@ -772,8 +1065,8 @@ const Sale = () => {
           </div>
         </section>
 
-        {/* Sección 3: Barra Inferior de Total y Botón Facturar */}
-        <section className="bg-[#023047] text-white rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
+        {/* Sección 3: Barra Inferior de Total, Cotización y Botón Facturar */}
+        <section className="bg-[#023047] text-white rounded-xl p-4 flex flex-col lg:flex-row items-center justify-between gap-4 shadow-md">
           <div className="flex items-baseline gap-3">
             <span className="text-sm sm:text-base font-bold uppercase tracking-wider text-sky-200">
               Total a Pagar:
@@ -783,14 +1076,36 @@ const Sale = () => {
             </span>
           </div>
 
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleInvoice}
-            className="w-full sm:w-auto min-w-[260px] py-3.5 px-8 rounded-xl bg-gradient-to-r from-[#ffb703] to-[#fb8500] hover:from-[#fb8500] hover:to-[#ffb703] text-[#023047] font-black text-lg shadow-lg transition disabled:opacity-50 cursor-pointer"
-          >
-            {isSubmitting ? 'Procesando Factura...' : 'Facturar e Imprimir'}
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2.5 w-full lg:w-auto">
+            <button
+              type="button"
+              onClick={handlePrintQuote}
+              title="Generar e imprimir cotización formal sin descontar inventario"
+              className="py-3 px-4 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow transition cursor-pointer"
+            >
+              <FaPrint />
+              <span>Cotización (PDF)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleWhatsAppQuote}
+              title="Enviar presupuesto al WhatsApp del cliente sin descontar inventario"
+              className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow transition cursor-pointer"
+            >
+              <FaWhatsapp className="text-base" />
+              <span>Cotizar WhatsApp</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={handleInvoice}
+              className="w-full sm:w-auto min-w-[230px] py-3.5 px-7 rounded-xl bg-gradient-to-r from-[#ffb703] to-[#fb8500] hover:from-[#fb8500] hover:to-[#ffb703] text-[#023047] font-black text-base sm:text-lg shadow-lg transition disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmitting ? 'Procesando Factura...' : 'Facturar e Imprimir'}
+            </button>
+          </div>
 
           {PrintId && invoices && <FactuPrint key={PrintId} id={invoices} />}
           <Ready show={showModal} onClose={handleCloseModal} Date="FACTURADO" />

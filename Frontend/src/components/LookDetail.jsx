@@ -3,7 +3,7 @@ import FactuView from "./FactuView";
 import Modalmini from "./Modalmini";
 import ReportCustomer from "./ReportCustomer";
 import ReportVehicle from "./ReportVehicle";
-import { FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaWhatsapp } from "react-icons/fa";
+import { FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaWhatsapp, FaMoneyBillWave } from "react-icons/fa";
 
 const WORKSHOP_STATUS_OPTIONS = [
   "Recibido",
@@ -20,6 +20,12 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   const [error, setError] = useState(null);
   const token = localStorage.getItem("authToken");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [abonoModal, setAbonoModal] = useState({
+    open: false,
+    sale: null,
+    amount: "",
+    notes: "",
+  });
 
   const [productUpdate, setProductUpdate] = useState({
     id: "",
@@ -499,6 +505,55 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           month: "2-digit",
           day: "2-digit",
         });
+  };
+
+  const handleOpenAbono = (sale) => {
+    setAbonoModal({
+      open: true,
+      sale,
+      amount: String(sale.pending_balance || 0),
+      notes: sale.payment_notes || "",
+    });
+  };
+
+  const handleSaveAbono = async (payFull = false) => {
+    if (!abonoModal.sale) return;
+    const sale = abonoModal.sale;
+    const pending = Number(sale.pending_balance || 0);
+    const abonoValue = payFull
+      ? pending
+      : Math.max(0, parseInt(abonoModal.amount, 10) || 0);
+
+    if (abonoValue <= 0) {
+      alert("Ingresa un valor de abono válido mayor a $0.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/sales/${sale.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          abono: abonoValue,
+          payment_notes:
+            abonoModal.notes?.trim() ||
+            `Abono registrado ($ ${formatPrice(abonoValue)})`,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("No se pudo registrar el abono.");
+      }
+
+      setAbonoModal({ open: false, sale: null, amount: "", notes: "" });
+      await fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   if (loading) {
@@ -1100,58 +1155,202 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
               <th className="py-3 px-4">Cliente</th>
               <th className="py-3 px-4">Vehículo</th>
               <th className="py-3 px-4">Mecánico</th>
+              <th className="py-3 px-4">Pago / Cartera</th>
               <th className="py-3 px-4">Fecha</th>
               <th className="py-3 px-4 text-right">Total</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredData.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4">
-                  <FactuView
-                    id={item.id}
-                    customerID={item.customer_id}
-                    vehicleID={item.vehicle_id}
-                    total={item.total}
-                    invoiceNumber={item.invoice?.invoice_number}
-                    saleData={item}
-                  />
-                </td>
-                <td className="py-3 px-4 font-semibold text-slate-800">
-                  {item.customer?.name || `Cliente #${item.customer_id}`}
-                </td>
-                <td className="py-3 px-4 text-slate-600">
-                  {item.vehicle?.plate ? (
-                    <span className="inline-block bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-mono text-xs font-bold border border-amber-300">
-                      {item.vehicle.plate}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-400">Mostrador</span>
-                  )}
-                </td>
-                <td className="py-3 px-4 text-slate-600">
-                  {item.worker?.name || "General"}
-                </td>
-                <td className="py-3 px-4 text-slate-500">
-                  {formatDateTime(item.created_at)}
-                </td>
-                <td className="py-3 px-4 text-right font-extrabold text-[#023047]">
-                  $ {formatPrice(item.total)}
-                </td>
-                <td className="py-3 px-4 text-center">
-                  <button
-                    type="button"
-                    className="rojo flex items-center gap-1 text-xs py-1.5 px-3 mx-auto"
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <FaTrash /> Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filteredData.map((item) => {
+              const pendingBalance = Number(item.pending_balance || 0);
+              return (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-3 px-4">
+                    <FactuView
+                      id={item.id}
+                      customerID={item.customer_id}
+                      vehicleID={item.vehicle_id}
+                      total={item.total}
+                      invoiceNumber={item.invoice?.invoice_number}
+                      saleData={item}
+                    />
+                  </td>
+                  <td className="py-3 px-4 font-semibold text-slate-800">
+                    {item.customer?.name || `Cliente #${item.customer_id}`}
+                  </td>
+                  <td className="py-3 px-4 text-slate-600">
+                    {item.vehicle?.plate ? (
+                      <span className="inline-block bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-mono text-xs font-bold border border-amber-300">
+                        {item.vehicle.plate}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Mostrador</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-slate-600">
+                    {item.worker?.name || "General"}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">
+                          {item.payment_method || "Efectivo"}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${
+                            pendingBalance > 0
+                              ? "bg-rose-100 text-rose-700 border-rose-300"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          }`}
+                        >
+                          {pendingBalance > 0
+                            ? `Debe: $ ${formatPrice(pendingBalance)}`
+                            : "Pagado"}
+                        </span>
+                      </div>
+                      {item.payment_notes && (
+                        <span className="text-[11px] text-slate-500 italic">
+                          {item.payment_notes}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-slate-500">
+                    {formatDateTime(item.created_at)}
+                  </td>
+                  <td className="py-3 px-4 text-right font-extrabold text-[#023047]">
+                    $ {formatPrice(item.total)}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {pendingBalance > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAbono(item)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 text-xs py-1.5 px-2.5 font-bold transition-colors cursor-pointer"
+                          title="Registrar abono o saldar cuenta por cobrar"
+                        >
+                          <FaMoneyBillWave /> Abonar
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="rojo flex items-center gap-1 text-xs py-1.5 px-2.5"
+                        onClick={() => handleDelete(item.id)}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+
+        <Modalmini
+          show={abonoModal.open}
+          onClose={() =>
+            setAbonoModal({ open: false, sale: null, amount: "", notes: "" })
+          }
+        >
+          {abonoModal.sale && (
+            <div className="flex flex-col w-full p-5 space-y-4 text-left">
+              <div className="border-b border-slate-200 pb-3">
+                <h2 className="text-lg font-extrabold text-[#023047]">
+                  Registrar Abono / Saldar Cuenta (#{abonoModal.sale.id})
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Cliente:{" "}
+                  <strong className="text-slate-700">
+                    {abonoModal.sale.customer?.name || "General"}
+                  </strong>{" "}
+                  • Total Factura: $ {formatPrice(abonoModal.sale.total)}
+                </p>
+              </div>
+
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase text-rose-800">
+                  Saldo Pendiente Actual:
+                </span>
+                <span className="text-lg font-black text-rose-700">
+                  $ {formatPrice(abonoModal.sale.pending_balance)}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Valor del Abono ($ COP)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={abonoModal.sale.pending_balance}
+                    value={abonoModal.amount}
+                    onChange={(e) =>
+                      setAbonoModal((prev) => ({
+                        ...prev,
+                        amount: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-[#023047] focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Observación / Medio del Abono
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Abonó $20.000 por Nequi..."
+                    value={abonoModal.notes}
+                    onChange={(e) =>
+                      setAbonoModal((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  className="rojo"
+                  onClick={() =>
+                    setAbonoModal({
+                      open: false,
+                      sale: null,
+                      amount: "",
+                      notes: "",
+                    })
+                  }
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="blue"
+                  onClick={() => handleSaveAbono(false)}
+                >
+                  Guardar Abono
+                </button>
+                <button
+                  type="button"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-xs font-extrabold transition cursor-pointer"
+                  onClick={() => handleSaveAbono(true)}
+                >
+                  Saldar Total ($ {formatPrice(abonoModal.sale.pending_balance)})
+                </button>
+              </div>
+            </div>
+          )}
+        </Modalmini>
       </div>
     );
   }
