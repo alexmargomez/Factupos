@@ -861,14 +861,31 @@ const Sale = () => {
                     <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Buscar producto por nombre o código..."
+                      placeholder="Buscar por nombre, código o escanear SKU (Enter para agregar)..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && searchTerm.trim()) {
+                          e.preventDefault();
+                          if (
+                            window.__factuposBarcodeMatcher &&
+                            window.__factuposBarcodeMatcher(searchTerm)
+                          ) {
+                            setSearchTerm('');
+                          }
+                        }
+                      }}
                       className="w-full pl-10 pr-4 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#219ebc] bg-slate-50 focus:bg-white transition"
                     />
                   </div>
                   <div className="flex-1 overflow-y-auto max-h-[360px] border border-slate-100 rounded-xl">
-                    <LookProduct addProduct={addProduct} searchTerm={searchTerm} />
+                    <LookProduct
+                      addProduct={addProduct}
+                      searchTerm={searchTerm}
+                      onBarcodeMatch={(fn) => {
+                        window.__factuposBarcodeMatcher = fn;
+                      }}
+                    />
                   </div>
                 </div>
               ) : (

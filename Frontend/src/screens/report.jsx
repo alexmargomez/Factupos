@@ -119,6 +119,20 @@ const Report = () => {
     return acc + sub;
   }, 0);
 
+  const costoProductosVendidos = filteredSales.reduce((acc, s) => {
+    const details = s.sale_details || s.saleDetails || [];
+    const subCost = details.reduce((sum, d) => {
+      const qty = Number(d.quantity || 1);
+      const unitCost =
+        Number(d.product?.cost_price ?? 0) ||
+        Number(products.find((p) => Number(p.id) === Number(d.product_id))?.cost_price ?? 0);
+      return sum + qty * unitCost;
+    }, 0);
+    return acc + subCost;
+  }, 0);
+
+  const utilidadRepuestos = Math.max(0, totalProductos - costoProductosVendidos);
+
   const totalServicios = filteredSales.reduce((acc, s) => {
     const svcs = s.services || [];
     const sub = svcs.reduce((sum, srv) => sum + Number(srv.price || 0), 0);
@@ -182,7 +196,7 @@ const Report = () => {
   const efectivoNetoCaja = ingresosEfectivo - gastosEnEfectivo;
 
   const lowStockProducts = products.filter(
-    (p) => Number(p.stock ?? 0) <= 5
+    (p) => Number(p.stock ?? 0) <= Number(p.min_stock ?? 5)
   );
 
   const formatPrice = (val) => {
@@ -426,6 +440,9 @@ const Report = () => {
             <p className="text-2xl font-extrabold text-slate-800">
               $ {formatPrice(totalProductos)}
             </p>
+            <span className="text-[11px] font-bold text-emerald-700">
+              Utilidad Neta: $ {formatPrice(utilidadRepuestos)}
+            </span>
           </div>
         </div>
 

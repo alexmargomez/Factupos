@@ -29,8 +29,11 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
 
   const [productUpdate, setProductUpdate] = useState({
     id: "",
+    sku: "",
     name: "",
+    cost_price: "",
     price: "",
+    min_stock: "",
     stock: "",
   });
   const [customerUpdate, setCustomerUpdate] = useState({
@@ -158,6 +161,8 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
       case "Productos":
         return (
           String(item.id).toLowerCase().includes(query) ||
+          item.sku?.toLowerCase().includes(query) ||
+          item.supplier?.name?.toLowerCase().includes(query) ||
           item.name?.toLowerCase().includes(query)
         );
       case "Clientes":
@@ -259,8 +264,11 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     if (selectedOption === "Productos") {
       setProductUpdate({
         id: item.id,
+        sku: item.sku || "",
         name: item.name || "",
+        cost_price: item.cost_price ?? 0,
         price: item.price ?? 0,
+        min_stock: item.min_stock ?? 5,
         stock: item.stock ?? 0,
       });
     } else if (selectedOption === "Clientes") {
@@ -330,8 +338,11 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           Accept: "application/json",
         },
         body: JSON.stringify({
+          sku: productUpdate.sku?.trim() || null,
           name: productUpdate.name,
+          cost_price: Number(productUpdate.cost_price || 0),
           price: Number(productUpdate.price),
+          min_stock: Number(productUpdate.min_stock ?? 5),
           stock:
             productUpdate.stock !== "" ? Number(productUpdate.stock) : undefined,
         }),
@@ -594,9 +605,11 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
-              <th className="py-3 px-4">Código</th>
+              <th className="py-3 px-4">Cód. / SKU</th>
               <th className="py-3 px-4">Nombre del Producto</th>
-              <th className="py-3 px-4 text-right">Precio Unitario</th>
+              <th className="py-3 px-4 text-right">Costo Compra</th>
+              <th className="py-3 px-4 text-right">Precio Venta</th>
+              <th className="py-3 px-4 text-center">Margen</th>
               <th className="py-3 px-4 text-center">Stock</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
@@ -604,23 +617,57 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           <tbody className="divide-y divide-slate-100">
             {filteredData.map((item) => {
               const stock = Number(item.stock ?? 0);
+              const minAlert = Number(item.min_stock ?? 5);
+              const cost = Number(item.cost_price ?? 0);
+              const price = Number(item.price ?? 0);
+              const profit = price - cost;
+              const marginPct = price > 0 ? Math.round((profit / price) * 100) : 0;
+
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs font-bold text-slate-500">
-                    #{item.id}
+                    <div>#{item.id}</div>
+                    {item.sku && (
+                      <span className="inline-block mt-0.5 bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.5 rounded text-[11px]">
+                        {item.sku}
+                      </span>
+                    )}
                   </td>
-                  <td className="py-3 px-4 font-semibold text-slate-800">
-                    {item.name}
+                  <td className="py-3 px-4">
+                    <p className="font-semibold text-slate-800">{item.name}</p>
+                    {item.supplier?.name && (
+                      <p className="text-xs text-slate-400">
+                        Prov: {item.supplier.name}
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-right text-slate-600">
+                    $ {formatPrice(cost)}
                   </td>
                   <td className="py-3 px-4 text-right font-bold text-[#023047]">
-                    $ {formatPrice(item.price)}
+                    $ {formatPrice(price)}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    {cost > 0 ? (
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
+                          profit > 0
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-rose-50 text-rose-700"
+                        }`}
+                      >
+                        +$ {formatPrice(profit)} ({marginPct}%)
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span
                       className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${
                         stock <= 0
                           ? "bg-red-100 text-red-700"
-                          : stock <= 5
+                          : stock <= minAlert
                           ? "bg-amber-100 text-amber-800"
                           : "bg-emerald-100 text-emerald-700"
                       }`}
@@ -659,11 +706,25 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                 Modificar Producto #{productUpdate.id}
               </h2>
               <p className="text-xs text-slate-500">
-                Actualiza el nombre, precio de venta o existencias en inventario
+                Actualiza código de barras (SKU), costo de compra, precio de venta o existencias
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Código de Barras / SKU
+                </label>
+                <input
+                  type="text"
+                  name="sku"
+                  value={productUpdate.sku}
+                  onChange={handleChangeProduct}
+                  placeholder="Ej: 770123456"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
                   Nombre del Producto
@@ -679,7 +740,21 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
 
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Precio Unitario ($)
+                  Costo de Compra ($)
+                </label>
+                <input
+                  type="number"
+                  name="cost_price"
+                  min="0"
+                  value={productUpdate.cost_price}
+                  onChange={handleChangeProduct}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Precio de Venta ($)
                 </label>
                 <input
                   type="number"
@@ -687,7 +762,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   min="0"
                   value={productUpdate.price}
                   onChange={handleChangeProduct}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
                 />
               </div>
 
@@ -700,6 +775,20 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   name="stock"
                   min="0"
                   value={productUpdate.stock}
+                  onChange={handleChangeProduct}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Stock Mínimo (Alerta)
+                </label>
+                <input
+                  type="number"
+                  name="min_stock"
+                  min="0"
+                  value={productUpdate.min_stock}
                   onChange={handleChangeProduct}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
                 />

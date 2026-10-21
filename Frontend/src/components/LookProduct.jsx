@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaCartPlus } from 'react-icons/fa';
 
-const LookProduct = ({ addProduct, searchTerm }) => {
+const LookProduct = ({ addProduct, searchTerm, onBarcodeMatch }) => {
   const API_URL = import.meta.env.VITE_API_URL;
   const [products, setProducts] = useState([]);
   const [units, setUnits] = useState({});
@@ -36,9 +36,30 @@ const LookProduct = ({ addProduct, searchTerm }) => {
     if (!term) return true;
     return (
       product.name?.toLowerCase().includes(term) ||
+      product.sku?.toLowerCase().includes(term) ||
       String(product.id).includes(term)
     );
   });
+
+  // Exponer coincidencia exacta de código de barras / SKU al presionar Enter en POS
+  useEffect(() => {
+    if (typeof onBarcodeMatch === 'function') {
+      onBarcodeMatch((rawCode) => {
+        const clean = (rawCode || '').trim().toLowerCase();
+        if (!clean) return false;
+        const exact = products.find(
+          (p) =>
+            (p.sku && p.sku.toLowerCase() === clean) ||
+            String(p.id) === clean
+        );
+        if (exact) {
+          addProduct({ ...exact, und: 1 });
+          return true;
+        }
+        return false;
+      });
+    }
+  }, [products, onBarcodeMatch, addProduct]);
 
   const handleUnitChange = (productId, rawValue) => {
     if (rawValue === '') {
@@ -76,7 +97,7 @@ const LookProduct = ({ addProduct, searchTerm }) => {
       <table className="w-full text-left border-collapse">
         <thead>
           <tr className="border-b border-slate-200 text-xs font-bold uppercase text-slate-500 bg-slate-50">
-            <th className="py-2.5 px-2 w-14">Cód.</th>
+            <th className="py-2.5 px-2 w-20">Cód. / SKU</th>
             <th className="py-2.5 px-2">Producto</th>
             <th className="py-2.5 px-2 text-right">Precio</th>
             <th className="py-2.5 px-2 text-center">Stock</th>
@@ -98,7 +119,12 @@ const LookProduct = ({ addProduct, searchTerm }) => {
               return (
                 <tr key={product.id} className="hover:bg-slate-50/80 transition">
                   <td className="py-2.5 px-2 font-mono text-xs text-slate-500">
-                    #{product.id}
+                    <div>#{product.id}</div>
+                    {product.sku && (
+                      <span className="text-[10px] bg-slate-100 text-slate-700 px-1 rounded border border-slate-200">
+                        {product.sku}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2.5 px-2 font-semibold text-slate-800">
                     {product.name}
@@ -109,7 +135,7 @@ const LookProduct = ({ addProduct, searchTerm }) => {
                   <td className="py-2.5 px-2 text-center">
                     <span
                       className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
-                        stockNum > 5
+                        stockNum > (Number(product.min_stock) || 5)
                           ? 'bg-emerald-100 text-emerald-800'
                           : stockNum > 0
                           ? 'bg-amber-100 text-amber-800'
@@ -136,7 +162,7 @@ const LookProduct = ({ addProduct, searchTerm }) => {
                         addProduct({ ...product, und: validQty });
                         setUnits((prev) => ({ ...prev, [product.id]: 1 }));
                       }}
-                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#023047] hover:bg-[#fb8500] text-white text-xs font-bold transition shadow-2xs"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#023047] hover:bg-[#fb8500] text-white text-xs font-bold transition shadow-2xs cursor-pointer"
                     >
                       <FaCartPlus />
                       <span>Agregar</span>
