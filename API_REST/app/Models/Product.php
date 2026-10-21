@@ -9,8 +9,16 @@ class Product extends Model
 {
     use HasFactory;
 
-    protected $table = 'Products';  
-    protected $fillable = ['name', 'price', 'category_id'];  
+    protected $table = 'Products';
+    protected $fillable = [
+        'sku',
+        'name',
+        'cost_price',
+        'price',
+        'min_stock',
+        'category_id',
+        'supplier_id',
+    ];
 
     public function saleDetails()
     {
@@ -25,5 +33,10 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
     }
 }

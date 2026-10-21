@@ -18,13 +18,13 @@ Construido bajo una arquitectura **Monorepo Multicontenedor** (`Frontend` + `Bac
 
 ## ✨ ¿Qué es FactuPOS y qué resuelve?
 
-**FactuPOS** centraliza en una sola interfaz todo el flujo operativo y financiero de un negocio de comercialización de repuestos y prestación de servicios técnicos/taller:
+**FactuPOS** centraliza en una sola interfaz todo el flujo operativo, comercial y financiero de un negocio de comercialización de repuestos y prestación de servicios técnicos/taller:
 
-- 🛒 **Punto de Venta (POS) Ágil y Transaccional:** Facturación combinada de productos físicos (repuestos/insumos) y servicios de mano de obra en una misma venta, con cálculo automático de totales, asignación de técnico y generación instantánea de factura imprimible.
-- 📦 **Control de Inventario en Tiempo Real:** Sincronización automática de existencias al registrar ventas o anulaciones, alertas de stock bajo (`<= 5` unidades) y bitácora completa de entradas (`+`) y salidas (`-`).
-- 📅 **Agendamiento de Taller Conectado al POS:** Las citas programadas con lista de servicios pendientes se cargan automáticamente cuando el cliente pasa a caja a facturar, evitando doble digitación.
-- 👨‍🔧 **Liquidación Diaria de Técnicos / Mecánicos:** Acumulado automático del valor de mano de obra generado por cada técnico en el día, con cierre y reinicio diario en 1 clic.
-- 🔍 **Trazabilidad Histórica por Cliente y Vehículo:** Consulta inmediata de todas las facturas, repuestos instalados y mantenimientos realizados a un cliente o a una placa específica.
+- 🛒 **Punto de Venta (POS) Ágil, Cotizaciones y Cartera:** Facturación combinada de repuestos y mano de obra, generación de **Cotizaciones Imprimibles / WhatsApp** sin descontar inventario, lectura de **Código de Barras / SKU**, **Pagos Mixtos** y control de **Créditos / Abonos (Cuentas por Cobrar)**.
+- 📦 **Inventario Valorizado y Proveedores:** Control en tiempo real de existencias con **Costo de Compra vs. Precio de Venta**, cálculo de **Margen de Ganancia (%)**, utilidad proyectada en bodega, directorio de **Proveedores** y alertas personalizadas por `min_stock`.
+- 🛠️ **Tablero Kanban de Taller y Recepción Técnica:** Órdenes de trabajo con estados visuales en tiempo real (`Recibido` $\rightarrow$ `En Diagnóstico` $\rightarrow$ `Esperando Repuesto` $\rightarrow$ `En Reparación` $\rightarrow$ `Listo para Entrega`), registro de kilometraje, observaciones de ingreso y carga automática en caja al facturar.
+- 🔔 **Alertas de Mantenimiento, SOAT y Notificaciones WhatsApp:** Control de próximo cambio de aceite por kilometraje, vencimiento de **SOAT** y **Tecnomecánica**, y envío directo de facturas, cotizaciones, estados de taller y recordatorios por **WhatsApp (`wa.me`) en 1 clic**.
+- 👨‍🔧 **Comisiones de Mecánicos, Arqueo de Caja y Exportación Excel (CSV):** Porcentaje de comisión configurable por técnico (`% Técnico` vs. `% Taller`), **Historial Auditable de Liquidaciones Pagadas**, registro de **Gastos Menores / Salidas de Caja**, utilidad neta real y exportación contable a **Excel (CSV)** en 1 clic.
 
 ---
 
@@ -136,10 +136,10 @@ Si despliegas **FactuPOS** desde **ALpanel**:
 Factupos/
 ├── API_REST/               # Backend Laravel 11 (PHP 8.2 + Sanctum + SnappyPDF)
 │   ├── app/
-│   │   ├── Http/Controllers/ # Controladores REST (Ventas, Facturas, Inventario, Taller)
-│   │   └── Models/           # Modelos Eloquent (User, Customer, Vehicle, Product, Sale, Invoice...)
+│   │   ├── Http/Controllers/ # Controladores REST (Ventas, Facturas, Inventario, Taller, Caja, Proveedores)
+│   │   └── Models/           # Modelos Eloquent (User, Customer, Vehicle, Product, Supplier, Expense, WorkerSettlement...)
 │   ├── database/
-│   │   ├── migrations/       # Esquema relacional de tablas
+│   │   ├── migrations/       # Esquema relacional de tablas y evoluciones modulares
 │   │   └── seeders/          # Usuarios admin, mecánicos y categorías iniciales
 │   ├── resources/views/      # Plantillas Blade para facturas PDF/HTML imprimibles
 │   ├── routes/api.php        # Definición de endpoints RESTful bajo /api
@@ -148,8 +148,8 @@ Factupos/
 ├── Frontend/               # Frontend React 19 + Vite 6 + Tailwind CSS v4
 │   ├── src/
 │   │   ├── assets/           # Identidad visual y logos vectoriales de FactuPOS
-│   │   ├── components/       # Modales, visor de facturas, buscadores y barra de navegación
-│   │   ├── screens/          # Vistas: Login, Dashboard, POS, Taller, Inventario, Consultas, Reportes
+│   │   ├── components/       # Modales, visor de facturas, buscadores, alertas y barra de navegación
+│   │   ├── screens/          # Vistas: Login, Dashboard, POS, Taller Kanban, Inventario, Consultas, Reportes
 │   │   └── services/         # Servicios auxiliares de consulta a la API
 │   ├── vite.config.js        # Configuración de puertos dinámicos y proxy /api -> backend
 │   ├── Dockerfile            # Imagen Node 20 Alpine + Vite
@@ -165,20 +165,24 @@ Factupos/
 
 1. **Panel Principal (`/dashboard`)**:
    - Resumen operativo con accesos directos a todos los módulos del sistema y atajo rápido a nueva factura POS.
-2. **Facturación POS (`/sales`)**:
-   - Búsqueda y registro rápido de **Clientes** y **Vehículos** (ventas de mostrador o servicio de taller).
-   - Carga automática de servicios desde **citas pendientes** al seleccionar un cliente.
-   - Catálogo de **Productos** con validación de stock disponible y pestaña de **Mano de Obra / Servicios**.
-   - Carrito interactivo con ajuste de cantidades (`+` / `-`), asignación de mecánico, selección de método de pago (`Efectivo`, `Transferencia / Nequi`, `Tarjeta`) e impresión inmediata de factura.
-3. **Agendamiento de Taller (`/schedule`)**:
-   - Programación de citas pendientes vinculando cliente, vehículo, mecánico responsable y lista detallada de trabajos por realizar.
-4. **Gestión de Inventario (`/inventory`)**:
-   - Alta de nuevos productos con stock inicial y registro rápido de entradas (`+`) y salidas (`-`) de mercancía.
-5. **Consultas e Historiales (`/look`)**:
-   - Explorador unificado con pestañas para **Productos**, **Clientes** (con modal de historial clínico/técnico), **Vehículos** (con historial por placa), **Ventas** (con visor y reimpresión de factura), **Pendientes** y **Movimientos de Inventario**.
-6. **Reportes y Cierre de Caja (`/reports`)**:
-   - KPIs financieros filtrables por **Hoy**, **Este Mes** e **Histórico** (Total Facturado, Ingresos por Repuestos, Ingresos por Mano de Obra).
-   - Liquidación diaria de mecánicos con botón de **Cerrar Día** (reinicio de acumulado diario a `$0`) y alertas de productos por agotarse.
+2. **Facturación POS y Cotizaciones (`/sales`)**:
+   - Registro rápido de **Clientes** y **Vehículos** con alertas de vencimiento de **SOAT**, **Tecnomecánica** y **Cambio de Aceite**.
+   - Carga automática de órdenes de trabajo pendientes al seleccionar un cliente.
+   - Buscador con soporte de **Lector de Código de Barras / SKU** (agrega al carrito al presionar `Enter`).
+   - Modo **Generar Cotización** (imprimible y enviable por WhatsApp sin descontar inventario) y **Facturar Venta** con soporte para `Efectivo`, `Transferencia / Nequi`, `Tarjeta`, `Pago Mixto` y `Crédito / Pendiente`.
+3. **Agendamiento y Tablero Kanban de Taller (`/schedule`)**:
+   - Recepción de vehículos con **Kilometraje de Ingreso**, **Estado Inicial** y **Observaciones / Inventario de Recepción**.
+   - **Tablero Kanban de Taller en Vivo** con cambio de estado en 1 clic y botón de aviso directo por **WhatsApp** al propietario.
+4. **Inventario Valorizado y Proveedores (`/inventory`)**:
+   - Alta de productos con **Código SKU**, **Costo de Compra**, **Precio de Venta**, cálculo en vivo de **Margen de Ganancia (%)**, **Stock Mínimo** y **Proveedor**.
+   - Entradas de mercancía con actualización opcional del costo unitario y directorio completo de **Proveedores**.
+5. **Consultas, Cartera y Exportación (`/look`)**:
+   - Explorador unificado para **Productos**, **Clientes**, **Vehículos**, **Ventas** (con botón **Abonar / Saldar Cartera**), **Pendientes** y **Movimientos**.
+   - Botón **Exportar a Excel (CSV)** en cada pestaña para descargar la vista filtrada actual.
+6. **Reportes, Arqueo de Caja y Liquidaciones (`/reports`)**:
+   - **KPIs Financieros y Valorización de Bodega**: Total Facturado, Utilidad Neta Real, Repuestos + Ganancia, Mano de Obra, Cartera por Cobrar, Gastos de Caja, Capital en Bodega (Costo) y Valor Venta Potencial.
+   - **Comisiones y Liquidación de Mecánicos**: Configuración de `% Comisión` por técnico, desglose `Bruto Día` / `Pago Técnico` / `Utilidad Taller` e **Historial de Liquidaciones Pagadas**.
+   - **Gastos Menores / Salidas de Caja** y centro de **Exportación Contable a Excel (CSV)**.
 
 ---
 
@@ -190,14 +194,16 @@ Todas las rutas bajo `/api` (excepto `POST /api/login`) están protegidas median
 | :--- | :--- | :--- | :--- |
 | **Autenticación** | `/api/login`, `/api/logout` | `POST` | Emisión y revocación de tokens Bearer |
 | **Clientes** | `/api/customers` | `GET`, `POST`, `PUT`, `DELETE` | CRUD de clientes |
-| **Vehículos** | `/api/vehicles` | `GET`, `POST`, `PUT`, `DELETE` | CRUD de vehículos asociados a clientes |
-| **Categorías** | `/api/categories` | `GET`, `POST`, `PUT`, `DELETE` | Categorías del catálogo |
-| **Productos** | `/api/products` | `GET`, `POST`, `PUT`, `DELETE` | Catálogo con creación automática de stock |
+| **Vehículos** | `/api/vehicles` | `GET`, `POST`, `PUT`, `DELETE` | CRUD de vehículos, kilometraje, aceite, SOAT y Tecnomecánica |
+| **Proveedores** | `/api/suppliers` | `GET`, `POST`, `PUT`, `DELETE` | Directorio de proveedores de repuestos e insumos |
+| **Productos** | `/api/products` | `GET`, `POST`, `PUT`, `DELETE` | Catálogo con SKU, costo de compra, precio de venta y stock |
 | **Inventario** | `/api/inventory` | `GET`, `POST`, `PUT` | Consulta y ajuste de existencias |
-| **Movimientos** | `/api/inventory-movements` | `GET`, `POST`, `PUT`, `DELETE` | Entradas y salidas con reversión de stock |
-| **Ventas POS** | `/api/sales` | `GET`, `POST`, `PUT`, `DELETE` | Cabecera de ventas con relaciones precargadas |
+| **Movimientos** | `/api/inventory-movements` | `GET`, `POST`, `PUT`, `DELETE` | Entradas y salidas con actualización de costo y reversión |
+| **Ventas y Cartera** | `/api/sales` | `GET`, `POST`, `PUT`, `DELETE` | Ventas POS, pagos mixtos, créditos y registro de abonos |
 | **Detalles Venta** | `/api/sale-details` | `GET`, `POST`, `PUT`, `DELETE` | Ítems vendidos y descuento transaccional de stock |
 | **Mano de Obra** | `/api/services` | `GET`, `POST` | Servicios por venta, cliente o vehículo |
 | **Facturas** | `/api/invoices`, `/api/invoices/pdf/{id}` | `GET`, `POST`, `DELETE` | Numeración `FACT-XXXXXX` y visor PDF/HTML |
-| **Agendamientos** | `/api/schedules` | `GET`, `POST`, `PUT`, `DELETE` | Citas de taller pendientes y completadas |
-| **Mecánicos** | `/api/workers` | `GET`, `POST`, `PUT`, `DELETE` | Técnicos y acumulado diario (`totalDia`) |
+| **Taller / Kanban** | `/api/schedules` | `GET`, `POST`, `PUT`, `DELETE` | Órdenes de taller, kilometraje, notas y estados Kanban |
+| **Gastos de Caja** | `/api/expenses` | `GET`, `POST`, `DELETE` | Salidas de caja menor y gastos operativos para arqueo |
+| **Mecánicos y Pagos** | `/api/workers`, `/api/workers/{id}/settle`, `/api/workers/settlements` | `GET`, `POST`, `PUT`, `DELETE` | Técnicos, `%` de comisión y liquidaciones auditables |
+

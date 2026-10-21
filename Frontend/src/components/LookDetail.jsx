@@ -3,7 +3,23 @@ import FactuView from "./FactuView";
 import Modalmini from "./Modalmini";
 import ReportCustomer from "./ReportCustomer";
 import ReportVehicle from "./ReportVehicle";
-import { FaEdit, FaTrash, FaArrowUp, FaArrowDown } from "react-icons/fa";
+import {
+  FaEdit,
+  FaTrash,
+  FaArrowUp,
+  FaArrowDown,
+  FaWhatsapp,
+  FaMoneyBillWave,
+  FaFileCsv,
+} from "react-icons/fa";
+
+const WORKSHOP_STATUS_OPTIONS = [
+  "Recibido",
+  "En Diagnóstico",
+  "Esperando Repuesto",
+  "En Reparación",
+  "Listo para Entrega",
+];
 
 const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   const API_URL = import.meta.env.VITE_API_URL;
@@ -12,11 +28,20 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   const [error, setError] = useState(null);
   const token = localStorage.getItem("authToken");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [abonoModal, setAbonoModal] = useState({
+    open: false,
+    sale: null,
+    amount: "",
+    notes: "",
+  });
 
   const [productUpdate, setProductUpdate] = useState({
     id: "",
+    sku: "",
     name: "",
+    cost_price: "",
     price: "",
+    min_stock: "",
     stock: "",
   });
   const [customerUpdate, setCustomerUpdate] = useState({
@@ -31,6 +56,10 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     make: "",
     model: "",
     customer_id: "",
+    current_mileage: "",
+    next_oil_change_km: "",
+    soat_due_date: "",
+    tecno_due_date: "",
   });
 
   const parseServicios = (serviciosRaw) => {
@@ -140,6 +169,8 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
       case "Productos":
         return (
           String(item.id).toLowerCase().includes(query) ||
+          item.sku?.toLowerCase().includes(query) ||
+          item.supplier?.name?.toLowerCase().includes(query) ||
           item.name?.toLowerCase().includes(query)
         );
       case "Clientes":
@@ -241,8 +272,11 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     if (selectedOption === "Productos") {
       setProductUpdate({
         id: item.id,
+        sku: item.sku || "",
         name: item.name || "",
+        cost_price: item.cost_price ?? 0,
         price: item.price ?? 0,
+        min_stock: item.min_stock ?? 5,
         stock: item.stock ?? 0,
       });
     } else if (selectedOption === "Clientes") {
@@ -259,6 +293,16 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
         make: item.make || "",
         model: item.model || "",
         customer_id: item.customer_id || "",
+        current_mileage:
+          item.current_mileage != null ? String(item.current_mileage) : "",
+        next_oil_change_km:
+          item.next_oil_change_km != null ? String(item.next_oil_change_km) : "",
+        soat_due_date: item.soat_due_date
+          ? String(item.soat_due_date).slice(0, 10)
+          : "",
+        tecno_due_date: item.tecno_due_date
+          ? String(item.tecno_due_date).slice(0, 10)
+          : "",
       });
     }
     setIsModalOpen(true);
@@ -302,8 +346,11 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           Accept: "application/json",
         },
         body: JSON.stringify({
+          sku: productUpdate.sku?.trim() || null,
           name: productUpdate.name,
+          cost_price: Number(productUpdate.cost_price || 0),
           price: Number(productUpdate.price),
+          min_stock: Number(productUpdate.min_stock ?? 5),
           stock:
             productUpdate.stock !== "" ? Number(productUpdate.stock) : undefined,
         }),
@@ -344,6 +391,22 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
 
   const handleSaveVehicle = async () => {
     try {
+      const payload = {
+        plate: vehicleUpdate.plate,
+        make: vehicleUpdate.make,
+        model: vehicleUpdate.model,
+        customer_id: vehicleUpdate.customer_id || undefined,
+        current_mileage:
+          vehicleUpdate.current_mileage !== ""
+            ? Number(vehicleUpdate.current_mileage)
+            : null,
+        next_oil_change_km:
+          vehicleUpdate.next_oil_change_km !== ""
+            ? Number(vehicleUpdate.next_oil_change_km)
+            : null,
+        soat_due_date: vehicleUpdate.soat_due_date || null,
+        tecno_due_date: vehicleUpdate.tecno_due_date || null,
+      };
       const response = await fetch(`${API_URL}/vehicles/${vehicleUpdate.id}`, {
         method: "PUT",
         headers: {
@@ -351,7 +414,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
-        body: JSON.stringify(vehicleUpdate),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -361,6 +424,89 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     } catch (err) {
       console.error("Error al actualizar vehículo:", err);
     }
+  };
+
+  const handleUpdateScheduleStatus = async (itemOrId, nextStatus) => {
+    const id = typeof itemOrId === "object" ? itemOrId.id : itemOrId;
+    try {
+      const response = await fetch(`${API_URL}/schedules/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          workshop_status: nextStatus,
+        }),
+      });
+      if (response.ok) {
+        setData((prev) =>
+          prev.map((row) =>
+            row.id === id ? { ...row, workshop_status: nextStatus } : row
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Error actualizando estado de orden:", err);
+    }
+  };
+
+  const notifyOrderWhatsApp = (item) => {
+    const rawPhone = String(item.customer?.phone || "").replace(/\D/g, "");
+    if (!rawPhone) {
+      window.alert("Este cliente no tiene un número de teléfono/WhatsApp registrado.");
+      return;
+    }
+    const phone = rawPhone.length === 10 ? `57${rawPhone}` : rawPhone;
+    const status = item.workshop_status || "Recibido";
+    const servicesText =
+      item.serviciosList && item.serviciosList.length > 0
+        ? item.serviciosList.join(", ")
+        : "Mantenimiento general";
+    let msg = `Hola *${item.customerName}*, te escribimos de *FactuPOS Taller*.\n\n`;
+    if (status === "Listo para Entrega") {
+      msg += `✅ Tu vehículo placa *${item.vehiclePlate}* ya se encuentra *LISTO PARA ENTREGA*.\n`;
+    } else {
+      msg += `🔧 El estado actual de tu vehículo placa *${item.vehiclePlate}* en el taller es: *${status}*.\n`;
+    }
+    msg += `📋 *Servicios:* ${servicesText}\n\n¡Gracias por confiar en nosotros!`;
+
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  const notifyVehicleReminderWhatsApp = (item) => {
+    const rawPhone = String(item.customer?.phone || "").replace(/\D/g, "");
+    if (!rawPhone) {
+      window.alert("El propietario no tiene un número de teléfono/WhatsApp registrado.");
+      return;
+    }
+    const phone = rawPhone.length === 10 ? `57${rawPhone}` : rawPhone;
+    const ownerName = item.customer?.name || "Cliente";
+    let msg = `Hola *${ownerName}*, te saludamos de *FactuPOS Taller*.\n\nTe enviamos el recordatorio preventivo para tu vehículo *${item.make} ${item.model}* placa *${item.plate}*:\n`;
+    if (item.current_mileage) {
+      msg += `• Kilometraje registrado: ${Number(item.current_mileage).toLocaleString("es-CO")} km\n`;
+    }
+    if (item.next_oil_change_km) {
+      msg += `• Próximo cambio de aceite sugerido: ${Number(item.next_oil_change_km).toLocaleString("es-CO")} km\n`;
+    }
+    if (item.soat_due_date) {
+      msg += `• Vencimiento SOAT: ${String(item.soat_due_date).slice(0, 10)}\n`;
+    }
+    if (item.tecno_due_date) {
+      msg += `• Vencimiento Tecnomecánica: ${String(item.tecno_due_date).slice(0, 10)}\n`;
+    }
+    msg += `\nAgenda tu cita con nosotros cuando lo necesites.`;
+
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
 
   const formatPrice = (price) => {
@@ -380,6 +526,250 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           day: "2-digit",
         });
   };
+
+  const handleOpenAbono = (sale) => {
+    setAbonoModal({
+      open: true,
+      sale,
+      amount: String(sale.pending_balance || 0),
+      notes: sale.payment_notes || "",
+    });
+  };
+
+  const handleSaveAbono = async (payFull = false) => {
+    if (!abonoModal.sale) return;
+    const sale = abonoModal.sale;
+    const pending = Number(sale.pending_balance || 0);
+    const abonoValue = payFull
+      ? pending
+      : Math.max(0, parseInt(abonoModal.amount, 10) || 0);
+
+    if (abonoValue <= 0) {
+      alert("Ingresa un valor de abono válido mayor a $0.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/sales/${sale.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          abono: abonoValue,
+          payment_notes:
+            abonoModal.notes?.trim() ||
+            `Abono registrado ($ ${formatPrice(abonoValue)})`,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("No se pudo registrar el abono.");
+      }
+
+      setAbonoModal({ open: false, sale: null, amount: "", notes: "" });
+      await fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleExportCsv = () => {
+    if (filteredData.length === 0) return;
+
+    let headers = [];
+    let rows = [];
+
+    switch (selectedOption) {
+      case "Productos":
+        headers = [
+          "ID",
+          "SKU / Codigo",
+          "Nombre",
+          "Proveedor",
+          "Costo Compra ($)",
+          "Precio Venta ($)",
+          "Utilidad Unitaria ($)",
+          "Stock Actual",
+          "Stock Minimo",
+        ];
+        rows = filteredData.map((p) => [
+          p.id,
+          p.sku || "",
+          p.name || "",
+          p.supplier?.name || "Sin proveedor",
+          Number(p.cost_price ?? 0),
+          Number(p.price ?? 0),
+          Number(p.price ?? 0) - Number(p.cost_price ?? 0),
+          Number(p.stock ?? 0),
+          Number(p.min_stock ?? 5),
+        ]);
+        break;
+
+      case "Clientes":
+        headers = ["ID", "Nombre Completo", "Telefono", "Correo Electronico"];
+        rows = filteredData.map((c) => [
+          c.id,
+          c.name || "",
+          c.phone || "",
+          c.email || "",
+        ]);
+        break;
+
+      case "Vehiculos":
+        headers = [
+          "ID",
+          "Placa",
+          "Marca",
+          "Modelo / Linea",
+          "Propietario",
+          "Kilometraje Actual",
+          "Proximo Cambio Aceite (km)",
+          "Vencimiento SOAT",
+          "Vencimiento Tecnomecanica",
+        ];
+        rows = filteredData.map((v) => [
+          v.id,
+          v.plate || "",
+          v.make || "",
+          v.model || "",
+          v.customer?.name || `Cliente #${v.customer_id}`,
+          v.current_mileage ?? "",
+          v.next_oil_change_km ?? "",
+          v.soat_due_date || "",
+          v.tecno_due_date || "",
+        ]);
+        break;
+
+      case "Ventas":
+        headers = [
+          "ID Venta",
+          "Factura",
+          "Fecha",
+          "Cliente",
+          "Placa Vehiculo",
+          "Mecanico",
+          "Metodo Pago",
+          "Estado Pago",
+          "Total Factura ($)",
+          "Total Pagado ($)",
+          "Saldo Pendiente ($)",
+          "Notas de Pago",
+        ];
+        rows = filteredData.map((s) => [
+          s.id,
+          s.invoice?.invoice_number || `FACT-${s.id}`,
+          formatDateTime(s.created_at),
+          s.customer?.name || `Cliente #${s.customer_id}`,
+          s.vehicle?.plate || "Mostrador",
+          s.worker?.name || "General",
+          s.payment_method || "Efectivo",
+          s.payment_status || "Pagado",
+          Number(s.total || 0),
+          Number(s.paid_amount ?? s.total ?? 0),
+          Number(s.pending_balance || 0),
+          s.payment_notes || "",
+        ]);
+        break;
+
+      case "Pendientes":
+        headers = [
+          "ID Orden",
+          "Fecha",
+          "Cliente",
+          "Placa Vehiculo",
+          "Kilometraje",
+          "Mecanico",
+          "Estado Taller",
+          "Servicios",
+          "Observaciones",
+        ];
+        rows = filteredData.map((item) => [
+          item.id,
+          formatDateTime(item.created_at),
+          item.customerName || "",
+          item.vehiclePlate || "",
+          item.mileage ?? "",
+          item.workerName || "",
+          item.workshop_status || "Recibido",
+          (item.serviciosList || []).join(", "),
+          item.notes || "",
+        ]);
+        break;
+
+      case "Movimientos":
+        headers = [
+          "ID Movimiento",
+          "Producto",
+          "Tipo",
+          "Cantidad",
+          "Motivo / Referencia",
+          "Fecha",
+        ];
+        rows = filteredData.map((m) => [
+          m.id,
+          m.product_name ||
+            m.inventory?.product?.name ||
+            `Inventario #${m.inventory_id}`,
+          m.movement_type === "incoming" ? "Entrada" : "Salida",
+          m.quantity,
+          m.reason || "",
+          formatDateTime(m.movement_date || m.created_at),
+        ]);
+        break;
+
+      default:
+        return;
+    }
+
+    const escapeCell = (val) => {
+      const str = val == null ? "" : String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const csvContent =
+      "\uFEFF" +
+      [headers.map(escapeCell).join(";")]
+        .concat(rows.map((r) => r.map(escapeCell).join(";")))
+        .join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `FactuPOS_${selectedOption}_${dateStr}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const renderExportToolbar = () => (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
+      <p className="text-xs text-slate-500 font-medium">
+        Mostrando{" "}
+        <span className="font-bold text-[#023047]">{filteredData.length}</span>{" "}
+        de <span className="font-bold text-slate-700">{data.length}</span>{" "}
+        registros en{" "}
+        <span className="font-bold text-[#023047]">
+          {selectedOption === "Vehiculos" ? "Vehículos" : selectedOption}
+        </span>
+      </p>
+      <button
+        type="button"
+        onClick={handleExportCsv}
+        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-lg shadow-xs transition cursor-pointer self-start sm:self-auto"
+      >
+        <FaFileCsv className="text-sm" /> Exportar {selectedOption} a Excel (CSV)
+      </button>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -416,12 +806,15 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Productos") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
-              <th className="py-3 px-4">Código</th>
+              <th className="py-3 px-4">Cód. / SKU</th>
               <th className="py-3 px-4">Nombre del Producto</th>
-              <th className="py-3 px-4 text-right">Precio Unitario</th>
+              <th className="py-3 px-4 text-right">Costo Compra</th>
+              <th className="py-3 px-4 text-right">Precio Venta</th>
+              <th className="py-3 px-4 text-center">Margen</th>
               <th className="py-3 px-4 text-center">Stock</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
@@ -429,23 +822,57 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
           <tbody className="divide-y divide-slate-100">
             {filteredData.map((item) => {
               const stock = Number(item.stock ?? 0);
+              const minAlert = Number(item.min_stock ?? 5);
+              const cost = Number(item.cost_price ?? 0);
+              const price = Number(item.price ?? 0);
+              const profit = price - cost;
+              const marginPct = price > 0 ? Math.round((profit / price) * 100) : 0;
+
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs font-bold text-slate-500">
-                    #{item.id}
+                    <div>#{item.id}</div>
+                    {item.sku && (
+                      <span className="inline-block mt-0.5 bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.5 rounded text-[11px]">
+                        {item.sku}
+                      </span>
+                    )}
                   </td>
-                  <td className="py-3 px-4 font-semibold text-slate-800">
-                    {item.name}
+                  <td className="py-3 px-4">
+                    <p className="font-semibold text-slate-800">{item.name}</p>
+                    {item.supplier?.name && (
+                      <p className="text-xs text-slate-400">
+                        Prov: {item.supplier.name}
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-right text-slate-600">
+                    $ {formatPrice(cost)}
                   </td>
                   <td className="py-3 px-4 text-right font-bold text-[#023047]">
-                    $ {formatPrice(item.price)}
+                    $ {formatPrice(price)}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    {cost > 0 ? (
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
+                          profit > 0
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-rose-50 text-rose-700"
+                        }`}
+                      >
+                        +$ {formatPrice(profit)} ({marginPct}%)
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span
                       className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${
                         stock <= 0
                           ? "bg-red-100 text-red-700"
-                          : stock <= 5
+                          : stock <= minAlert
                           ? "bg-amber-100 text-amber-800"
                           : "bg-emerald-100 text-emerald-700"
                       }`}
@@ -484,11 +911,25 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                 Modificar Producto #{productUpdate.id}
               </h2>
               <p className="text-xs text-slate-500">
-                Actualiza el nombre, precio de venta o existencias en inventario
+                Actualiza código de barras (SKU), costo de compra, precio de venta o existencias
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Código de Barras / SKU
+                </label>
+                <input
+                  type="text"
+                  name="sku"
+                  value={productUpdate.sku}
+                  onChange={handleChangeProduct}
+                  placeholder="Ej: 770123456"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
                   Nombre del Producto
@@ -504,7 +945,21 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
 
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Precio Unitario ($)
+                  Costo de Compra ($)
+                </label>
+                <input
+                  type="number"
+                  name="cost_price"
+                  min="0"
+                  value={productUpdate.cost_price}
+                  onChange={handleChangeProduct}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Precio de Venta ($)
                 </label>
                 <input
                   type="number"
@@ -512,7 +967,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   min="0"
                   value={productUpdate.price}
                   onChange={handleChangeProduct}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
                 />
               </div>
 
@@ -525,6 +980,20 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   name="stock"
                   min="0"
                   value={productUpdate.stock}
+                  onChange={handleChangeProduct}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Stock Mínimo (Alerta)
+                </label>
+                <input
+                  type="number"
+                  name="min_stock"
+                  min="0"
+                  value={productUpdate.min_stock}
                   onChange={handleChangeProduct}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
                 />
@@ -553,6 +1022,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Clientes") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -684,66 +1154,159 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
 
   // 3. VEHÍCULOS
   if (selectedOption === "Vehiculos") {
+    const todayStr = new Date().toISOString().split("T")[0];
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
               <th className="py-3 px-4 text-center">Historial</th>
               <th className="py-3 px-4">Placa</th>
-              <th className="py-3 px-4">Marca</th>
-              <th className="py-3 px-4">Modelo / Línea</th>
+              <th className="py-3 px-4">Marca / Línea</th>
               <th className="py-3 px-4">Propietario</th>
+              <th className="py-3 px-4">Km / Próx. Aceite</th>
+              <th className="py-3 px-4">SOAT / Tecnomecánica</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredData.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4 text-center">
-                  <div className="flex justify-center">
-                    <ReportVehicle
-                      id={item.id}
-                      plate={item.plate}
-                      make={item.make}
-                      model={item.model}
-                      idCustomer={item.customer_id}
-                      ownerName={item.customer?.name}
-                    />
-                  </div>
-                </td>
-                <td className="py-3 px-4">
-                  <span className="inline-block bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded font-mono text-xs font-extrabold border border-amber-300">
-                    {item.plate}
-                  </span>
-                </td>
-                <td className="py-3 px-4 font-semibold text-slate-800">
-                  {item.make}
-                </td>
-                <td className="py-3 px-4 text-slate-600">{item.model}</td>
-                <td className="py-3 px-4 text-slate-600">
-                  {item.customer?.name || `Cliente #${item.customer_id}`}
-                </td>
-                <td className="py-3 px-4">
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openModal(item)}
-                      className="blue flex items-center gap-1 text-xs py-1.5 px-3"
-                    >
-                      <FaEdit /> Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(item.id)}
-                      className="rojo flex items-center gap-1 text-xs py-1.5 px-3"
-                    >
-                      <FaTrash /> Eliminar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filteredData.map((item) => {
+              const oilOverdue =
+                item.current_mileage != null &&
+                item.next_oil_change_km != null &&
+                Number(item.current_mileage) >= Number(item.next_oil_change_km);
+              const soatExpired =
+                item.soat_due_date && item.soat_due_date < todayStr;
+              const tecnoExpired =
+                item.tecno_due_date && item.tecno_due_date < todayStr;
+
+              return (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex justify-center">
+                      <ReportVehicle
+                        id={item.id}
+                        plate={item.plate}
+                        make={item.make}
+                        model={item.model}
+                        idCustomer={item.customer_id}
+                        ownerName={item.customer?.name}
+                      />
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="inline-block bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded font-mono text-xs font-extrabold border border-amber-300">
+                      {item.plate}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <p className="font-semibold text-slate-800">{item.make}</p>
+                    <p className="text-xs text-slate-500">{item.model}</p>
+                  </td>
+                  <td className="py-3 px-4 text-slate-600">
+                    <p className="font-medium text-slate-700">
+                      {item.customer?.name || `Cliente #${item.customer_id}`}
+                    </p>
+                    {item.customer?.phoneNumber && (
+                      <p className="text-xs text-slate-400">
+                        Tel: {item.customer.phoneNumber}
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    {item.current_mileage != null ||
+                    item.next_oil_change_km != null ? (
+                      <div className="space-y-1 text-xs">
+                        <p className="text-slate-700">
+                          Actual:{" "}
+                          <span className="font-bold">
+                            {item.current_mileage != null
+                              ? `${formatPrice(item.current_mileage)} km`
+                              : "—"}
+                          </span>
+                        </p>
+                        {item.next_oil_change_km != null && (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full font-bold ${
+                              oilOverdue
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            {oilOverdue ? "⚠️ " : "🛢️ "}
+                            Próx: {formatPrice(item.next_oil_change_km)} km
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">Sin registro</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="space-y-1 text-xs">
+                      {item.soat_due_date ? (
+                        <div>
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded font-semibold ${
+                              soatExpired
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            SOAT: {item.soat_due_date}
+                            {soatExpired ? " (Vencido)" : ""}
+                          </span>
+                        </div>
+                      ) : null}
+                      {item.tecno_due_date ? (
+                        <div>
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded font-semibold ${
+                              tecnoExpired
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            Tecno: {item.tecno_due_date}
+                            {tecnoExpired ? " (Vencida)" : ""}
+                          </span>
+                        </div>
+                      ) : null}
+                      {!item.soat_due_date && !item.tecno_due_date && (
+                        <span className="text-slate-400">Sin fechas</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => notifyVehicleReminderWhatsApp(item)}
+                        title="Enviar recordatorio de mantenimiento / documentos por WhatsApp"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 text-xs py-1.5 px-2.5 font-bold transition-colors cursor-pointer"
+                      >
+                        <FaWhatsapp /> Recordar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openModal(item)}
+                        className="blue flex items-center gap-1 text-xs py-1.5 px-2.5"
+                      >
+                        <FaEdit /> Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.id)}
+                        className="rojo flex items-center gap-1 text-xs py-1.5 px-2.5"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
@@ -754,48 +1317,108 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                 Modificar Vehículo ({vehicleUpdate.plate})
               </h2>
               <p className="text-xs text-slate-500">
-                Actualiza la placa, marca o línea del vehículo
+                Actualiza datos básicos, kilometraje y vencimientos de ley
               </p>
             </div>
 
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Placa
-                </label>
-                <input
-                  type="text"
-                  name="plate"
-                  value={vehicleUpdate.plate}
-                  onChange={handleChangeVehicle}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Placa
+                  </label>
+                  <input
+                    type="text"
+                    name="plate"
+                    value={vehicleUpdate.plate}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Marca
+                  </label>
+                  <input
+                    type="text"
+                    name="make"
+                    value={vehicleUpdate.make}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Modelo / Línea
+                  </label>
+                  <input
+                    type="text"
+                    name="model"
+                    value={vehicleUpdate.model}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Marca
-                </label>
-                <input
-                  type="text"
-                  name="make"
-                  value={vehicleUpdate.make}
-                  onChange={handleChangeVehicle}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Kilometraje Actual (km)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    name="current_mileage"
+                    value={vehicleUpdate.current_mileage}
+                    onChange={handleChangeVehicle}
+                    placeholder="Ej: 45000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Modelo / Línea
-                </label>
-                <input
-                  type="text"
-                  name="model"
-                  value={vehicleUpdate.model}
-                  onChange={handleChangeVehicle}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
-                />
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Próximo Cambio Aceite (km)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    name="next_oil_change_km"
+                    value={vehicleUpdate.next_oil_change_km}
+                    onChange={handleChangeVehicle}
+                    placeholder="Ej: 48000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Vencimiento SOAT
+                  </label>
+                  <input
+                    type="date"
+                    name="soat_due_date"
+                    value={vehicleUpdate.soat_due_date}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Vencimiento Tecnomecánica
+                  </label>
+                  <input
+                    type="date"
+                    name="tecno_due_date"
+                    value={vehicleUpdate.tecno_due_date}
+                    onChange={handleChangeVehicle}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
               </div>
             </div>
 
@@ -821,6 +1444,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Ventas") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -828,58 +1452,202 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
               <th className="py-3 px-4">Cliente</th>
               <th className="py-3 px-4">Vehículo</th>
               <th className="py-3 px-4">Mecánico</th>
+              <th className="py-3 px-4">Pago / Cartera</th>
               <th className="py-3 px-4">Fecha</th>
               <th className="py-3 px-4 text-right">Total</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredData.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4">
-                  <FactuView
-                    id={item.id}
-                    customerID={item.customer_id}
-                    vehicleID={item.vehicle_id}
-                    total={item.total}
-                    invoiceNumber={item.invoice?.invoice_number}
-                    saleData={item}
-                  />
-                </td>
-                <td className="py-3 px-4 font-semibold text-slate-800">
-                  {item.customer?.name || `Cliente #${item.customer_id}`}
-                </td>
-                <td className="py-3 px-4 text-slate-600">
-                  {item.vehicle?.plate ? (
-                    <span className="inline-block bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-mono text-xs font-bold border border-amber-300">
-                      {item.vehicle.plate}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-400">Mostrador</span>
-                  )}
-                </td>
-                <td className="py-3 px-4 text-slate-600">
-                  {item.worker?.name || "General"}
-                </td>
-                <td className="py-3 px-4 text-slate-500">
-                  {formatDateTime(item.created_at)}
-                </td>
-                <td className="py-3 px-4 text-right font-extrabold text-[#023047]">
-                  $ {formatPrice(item.total)}
-                </td>
-                <td className="py-3 px-4 text-center">
-                  <button
-                    type="button"
-                    className="rojo flex items-center gap-1 text-xs py-1.5 px-3 mx-auto"
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <FaTrash /> Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filteredData.map((item) => {
+              const pendingBalance = Number(item.pending_balance || 0);
+              return (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-3 px-4">
+                    <FactuView
+                      id={item.id}
+                      customerID={item.customer_id}
+                      vehicleID={item.vehicle_id}
+                      total={item.total}
+                      invoiceNumber={item.invoice?.invoice_number}
+                      saleData={item}
+                    />
+                  </td>
+                  <td className="py-3 px-4 font-semibold text-slate-800">
+                    {item.customer?.name || `Cliente #${item.customer_id}`}
+                  </td>
+                  <td className="py-3 px-4 text-slate-600">
+                    {item.vehicle?.plate ? (
+                      <span className="inline-block bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-mono text-xs font-bold border border-amber-300">
+                        {item.vehicle.plate}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Mostrador</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-slate-600">
+                    {item.worker?.name || "General"}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">
+                          {item.payment_method || "Efectivo"}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${
+                            pendingBalance > 0
+                              ? "bg-rose-100 text-rose-700 border-rose-300"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          }`}
+                        >
+                          {pendingBalance > 0
+                            ? `Debe: $ ${formatPrice(pendingBalance)}`
+                            : "Pagado"}
+                        </span>
+                      </div>
+                      {item.payment_notes && (
+                        <span className="text-[11px] text-slate-500 italic">
+                          {item.payment_notes}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-slate-500">
+                    {formatDateTime(item.created_at)}
+                  </td>
+                  <td className="py-3 px-4 text-right font-extrabold text-[#023047]">
+                    $ {formatPrice(item.total)}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {pendingBalance > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAbono(item)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 text-xs py-1.5 px-2.5 font-bold transition-colors cursor-pointer"
+                          title="Registrar abono o saldar cuenta por cobrar"
+                        >
+                          <FaMoneyBillWave /> Abonar
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="rojo flex items-center gap-1 text-xs py-1.5 px-2.5"
+                        onClick={() => handleDelete(item.id)}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+
+        <Modalmini
+          show={abonoModal.open}
+          onClose={() =>
+            setAbonoModal({ open: false, sale: null, amount: "", notes: "" })
+          }
+        >
+          {abonoModal.sale && (
+            <div className="flex flex-col w-full p-5 space-y-4 text-left">
+              <div className="border-b border-slate-200 pb-3">
+                <h2 className="text-lg font-extrabold text-[#023047]">
+                  Registrar Abono / Saldar Cuenta (#{abonoModal.sale.id})
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Cliente:{" "}
+                  <strong className="text-slate-700">
+                    {abonoModal.sale.customer?.name || "General"}
+                  </strong>{" "}
+                  • Total Factura: $ {formatPrice(abonoModal.sale.total)}
+                </p>
+              </div>
+
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase text-rose-800">
+                  Saldo Pendiente Actual:
+                </span>
+                <span className="text-lg font-black text-rose-700">
+                  $ {formatPrice(abonoModal.sale.pending_balance)}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Valor del Abono ($ COP)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={abonoModal.sale.pending_balance}
+                    value={abonoModal.amount}
+                    onChange={(e) =>
+                      setAbonoModal((prev) => ({
+                        ...prev,
+                        amount: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-[#023047] focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Observación / Medio del Abono
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Abonó $20.000 por Nequi..."
+                    value={abonoModal.notes}
+                    onChange={(e) =>
+                      setAbonoModal((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  className="rojo"
+                  onClick={() =>
+                    setAbonoModal({
+                      open: false,
+                      sale: null,
+                      amount: "",
+                      notes: "",
+                    })
+                  }
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="blue"
+                  onClick={() => handleSaveAbono(false)}
+                >
+                  Guardar Abono
+                </button>
+                <button
+                  type="button"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-xs font-extrabold transition cursor-pointer"
+                  onClick={() => handleSaveAbono(true)}
+                >
+                  Saldar Total ($ {formatPrice(abonoModal.sale.pending_balance)})
+                </button>
+              </div>
+            </div>
+          )}
+        </Modalmini>
       </div>
     );
   }
@@ -888,6 +1656,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Pendientes") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -895,7 +1664,8 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
               <th className="py-3 px-4">Cliente</th>
               <th className="py-3 px-4">Vehículo</th>
               <th className="py-3 px-4">Mecánico</th>
-              <th className="py-3 px-4">Servicios Solicitados</th>
+              <th className="py-3 px-4">Estado Taller</th>
+              <th className="py-3 px-4">Servicios / Recepción</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
           </thead>
@@ -906,14 +1676,39 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   {formatDateTime(item.created_at)}
                 </td>
                 <td className="py-3 px-4 font-semibold text-slate-800">
-                  {item.customerName}
+                  <p>{item.customerName}</p>
+                  {item.customerPhone && (
+                    <p className="text-xs text-slate-400 font-normal">
+                      Tel: {item.customerPhone}
+                    </p>
+                  )}
                 </td>
                 <td className="py-3 px-4">
                   <span className="inline-block bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded font-mono text-xs font-bold border border-amber-300">
                     {item.vehiclePlate}
                   </span>
+                  {item.mileage != null && (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {formatPrice(item.mileage)} km
+                    </p>
+                  )}
                 </td>
                 <td className="py-3 px-4 text-slate-600">{item.workerName}</td>
+                <td className="py-3 px-4">
+                  <select
+                    value={item.workshop_status || "Recibido"}
+                    onChange={(e) =>
+                      handleUpdateScheduleStatus(item.id, e.target.value)
+                    }
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-[#023047] focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                  >
+                    {WORKSHOP_STATUS_OPTIONS.map((statusOpt) => (
+                      <option key={statusOpt} value={statusOpt}>
+                        {statusOpt}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 <td className="py-3 px-4">
                   {item.serviciosList && item.serviciosList.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
@@ -929,15 +1724,30 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
                   ) : (
                     <span className="text-slate-400 text-xs">Sin especificar</span>
                   )}
+                  {item.notes && (
+                    <p className="text-xs text-slate-500 italic mt-1">
+                      Nota: {item.notes}
+                    </p>
+                  )}
                 </td>
                 <td className="py-3 px-4 text-center">
-                  <button
-                    type="button"
-                    className="rojo flex items-center gap-1 text-xs py-1.5 px-3 mx-auto"
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <FaTrash /> Eliminar
-                  </button>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => notifyOrderWhatsApp(item)}
+                      title="Notificar estado de la orden por WhatsApp"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 text-xs py-1.5 px-2.5 font-bold transition-colors cursor-pointer"
+                    >
+                      <FaWhatsapp /> Avisar
+                    </button>
+                    <button
+                      type="button"
+                      className="rojo flex items-center gap-1 text-xs py-1.5 px-2.5"
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      <FaTrash />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -951,6 +1761,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Movimientos") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">

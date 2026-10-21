@@ -20,10 +20,14 @@ class VehicleController extends Controller
             'model' => 'required|string|max:100',
             'make' => 'required|string|max:100',
             'customer_id' => 'required|exists:Customers,id',
+            'current_mileage' => 'nullable|integer|min:0',
+            'next_oil_change_km' => 'nullable|integer|min:0',
+            'soat_due_date' => 'nullable|date',
+            'tecno_due_date' => 'nullable|date',
         ]);
 
         $vehicle = Vehicle::create($validated);
-        return response()->json($vehicle, 201);
+        return response()->json($vehicle->load('customer'), 201);
     }
 
     public function show($id)
@@ -35,15 +39,26 @@ class VehicleController extends Controller
     public function update(Request $request, $id)
     {
         $validated = $request->validate([
-            'plate' => 'required|string|max:20',
-            'model' => 'required|string|max:100',
-            'make' => 'required|string|max:100',
+            'plate' => 'sometimes|required|string|max:20',
+            'model' => 'sometimes|required|string|max:100',
+            'make' => 'sometimes|required|string|max:100',
             'customer_id' => 'nullable|exists:Customers,id',
+            'current_mileage' => 'nullable|integer|min:0',
+            'next_oil_change_km' => 'nullable|integer|min:0',
+            'soat_due_date' => 'nullable|date',
+            'tecno_due_date' => 'nullable|date',
         ]);
         $vehicle = Vehicle::findOrFail($id);
-        $vehicle->update(array_filter($validated, fn($v) => !is_null($v)));
 
-        return response()->json($vehicle, 200);
+        $payload = [];
+        foreach (['plate', 'model', 'make', 'customer_id', 'current_mileage', 'next_oil_change_km', 'soat_due_date', 'tecno_due_date'] as $field) {
+            if ($request->exists($field)) {
+                $payload[$field] = $validated[$field] ?? null;
+            }
+        }
+        $vehicle->update($payload);
+
+        return response()->json($vehicle->load('customer'), 200);
     }
 
     public function destroy($id)

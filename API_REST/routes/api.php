@@ -14,6 +14,8 @@ use App\Http\Controllers\SaleDetailController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\WorkerController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\SupplierController;
 
 Route::get('/', function () {
     return response()->json(['message' => 'API RESTful Inventory System'], 200);
@@ -45,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('products')->group(function () {
         Route::get('/', [ProductController::class, 'index']);
         Route::post('/', [ProductController::class, 'create']);
+        Route::post('/{id}/purchase', [ProductController::class, 'registerPurchase']);
         Route::get('/{id}', [ProductController::class, 'show']);
         Route::put('/{id}', [ProductController::class, 'update']);
         Route::delete('/{id}', [ProductController::class, 'destroy']);
@@ -113,12 +116,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/customer/{id}', [ServiceController::class, 'showCustomer']);
         Route::get('/vehicle/{id}', [ServiceController::class, 'showVehicle']);
     });
+
     Route::prefix('workers')->group(function () {
         Route::get('/', [WorkerController::class, 'index']);
+        Route::get('/settlements', [WorkerController::class, 'settlements']);
         Route::post('/', [WorkerController::class, 'create']);
+        Route::post('/{id}/settle', [WorkerController::class, 'settle']);
         Route::get('/{id}', [WorkerController::class, 'show']);
         Route::put('/{id}', [WorkerController::class, 'update']);
         Route::delete('/{id}', [WorkerController::class, 'destroy']);
+    });
+
+    Route::prefix('expenses')->group(function () {
+        Route::get('/', [ExpenseController::class, 'index']);
+        Route::post('/', [ExpenseController::class, 'create']);
+        Route::delete('/{id}', [ExpenseController::class, 'destroy']);
+    });
+
+    Route::prefix('suppliers')->group(function () {
+        Route::get('/', [SupplierController::class, 'index']);
+        Route::post('/', [SupplierController::class, 'create']);
+        Route::put('/{id}', [SupplierController::class, 'update']);
+        Route::delete('/{id}', [SupplierController::class, 'destroy']);
     });
 });
 
