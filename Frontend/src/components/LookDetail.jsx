@@ -3,7 +3,15 @@ import FactuView from "./FactuView";
 import Modalmini from "./Modalmini";
 import ReportCustomer from "./ReportCustomer";
 import ReportVehicle from "./ReportVehicle";
-import { FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaWhatsapp, FaMoneyBillWave } from "react-icons/fa";
+import {
+  FaEdit,
+  FaTrash,
+  FaArrowUp,
+  FaArrowDown,
+  FaWhatsapp,
+  FaMoneyBillWave,
+  FaFileCsv,
+} from "react-icons/fa";
 
 const WORKSHOP_STATUS_OPTIONS = [
   "Recibido",
@@ -418,9 +426,10 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     }
   };
 
-  const handleUpdateScheduleStatus = async (item, nextStatus) => {
+  const handleUpdateScheduleStatus = async (itemOrId, nextStatus) => {
+    const id = typeof itemOrId === "object" ? itemOrId.id : itemOrId;
     try {
-      const response = await fetch(`${API_URL}/schedules/${item.id}`, {
+      const response = await fetch(`${API_URL}/schedules/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -434,7 +443,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
       if (response.ok) {
         setData((prev) =>
           prev.map((row) =>
-            row.id === item.id ? { ...row, workshop_status: nextStatus } : row
+            row.id === id ? { ...row, workshop_status: nextStatus } : row
           )
         );
       }
@@ -567,6 +576,201 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     }
   };
 
+  const handleExportCsv = () => {
+    if (filteredData.length === 0) return;
+
+    let headers = [];
+    let rows = [];
+
+    switch (selectedOption) {
+      case "Productos":
+        headers = [
+          "ID",
+          "SKU / Codigo",
+          "Nombre",
+          "Proveedor",
+          "Costo Compra ($)",
+          "Precio Venta ($)",
+          "Utilidad Unitaria ($)",
+          "Stock Actual",
+          "Stock Minimo",
+        ];
+        rows = filteredData.map((p) => [
+          p.id,
+          p.sku || "",
+          p.name || "",
+          p.supplier?.name || "Sin proveedor",
+          Number(p.cost_price ?? 0),
+          Number(p.price ?? 0),
+          Number(p.price ?? 0) - Number(p.cost_price ?? 0),
+          Number(p.stock ?? 0),
+          Number(p.min_stock ?? 5),
+        ]);
+        break;
+
+      case "Clientes":
+        headers = ["ID", "Nombre Completo", "Telefono", "Correo Electronico"];
+        rows = filteredData.map((c) => [
+          c.id,
+          c.name || "",
+          c.phone || "",
+          c.email || "",
+        ]);
+        break;
+
+      case "Vehiculos":
+        headers = [
+          "ID",
+          "Placa",
+          "Marca",
+          "Modelo / Linea",
+          "Propietario",
+          "Kilometraje Actual",
+          "Proximo Cambio Aceite (km)",
+          "Vencimiento SOAT",
+          "Vencimiento Tecnomecanica",
+        ];
+        rows = filteredData.map((v) => [
+          v.id,
+          v.plate || "",
+          v.make || "",
+          v.model || "",
+          v.customer?.name || `Cliente #${v.customer_id}`,
+          v.current_mileage ?? "",
+          v.next_oil_change_km ?? "",
+          v.soat_due_date || "",
+          v.tecno_due_date || "",
+        ]);
+        break;
+
+      case "Ventas":
+        headers = [
+          "ID Venta",
+          "Factura",
+          "Fecha",
+          "Cliente",
+          "Placa Vehiculo",
+          "Mecanico",
+          "Metodo Pago",
+          "Estado Pago",
+          "Total Factura ($)",
+          "Total Pagado ($)",
+          "Saldo Pendiente ($)",
+          "Notas de Pago",
+        ];
+        rows = filteredData.map((s) => [
+          s.id,
+          s.invoice?.invoice_number || `FACT-${s.id}`,
+          formatDateTime(s.created_at),
+          s.customer?.name || `Cliente #${s.customer_id}`,
+          s.vehicle?.plate || "Mostrador",
+          s.worker?.name || "General",
+          s.payment_method || "Efectivo",
+          s.payment_status || "Pagado",
+          Number(s.total || 0),
+          Number(s.paid_amount ?? s.total ?? 0),
+          Number(s.pending_balance || 0),
+          s.payment_notes || "",
+        ]);
+        break;
+
+      case "Pendientes":
+        headers = [
+          "ID Orden",
+          "Fecha",
+          "Cliente",
+          "Placa Vehiculo",
+          "Kilometraje",
+          "Mecanico",
+          "Estado Taller",
+          "Servicios",
+          "Observaciones",
+        ];
+        rows = filteredData.map((item) => [
+          item.id,
+          formatDateTime(item.created_at),
+          item.customerName || "",
+          item.vehiclePlate || "",
+          item.mileage ?? "",
+          item.workerName || "",
+          item.workshop_status || "Recibido",
+          (item.serviciosList || []).join(", "),
+          item.notes || "",
+        ]);
+        break;
+
+      case "Movimientos":
+        headers = [
+          "ID Movimiento",
+          "Producto",
+          "Tipo",
+          "Cantidad",
+          "Motivo / Referencia",
+          "Fecha",
+        ];
+        rows = filteredData.map((m) => [
+          m.id,
+          m.product_name ||
+            m.inventory?.product?.name ||
+            `Inventario #${m.inventory_id}`,
+          m.movement_type === "incoming" ? "Entrada" : "Salida",
+          m.quantity,
+          m.reason || "",
+          formatDateTime(m.movement_date || m.created_at),
+        ]);
+        break;
+
+      default:
+        return;
+    }
+
+    const escapeCell = (val) => {
+      const str = val == null ? "" : String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const csvContent =
+      "\uFEFF" +
+      [headers.map(escapeCell).join(";")]
+        .concat(rows.map((r) => r.map(escapeCell).join(";")))
+        .join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `FactuPOS_${selectedOption}_${dateStr}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const renderExportToolbar = () => (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
+      <p className="text-xs text-slate-500 font-medium">
+        Mostrando{" "}
+        <span className="font-bold text-[#023047]">{filteredData.length}</span>{" "}
+        de <span className="font-bold text-slate-700">{data.length}</span>{" "}
+        registros en{" "}
+        <span className="font-bold text-[#023047]">
+          {selectedOption === "Vehiculos" ? "Vehículos" : selectedOption}
+        </span>
+      </p>
+      <button
+        type="button"
+        onClick={handleExportCsv}
+        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-lg shadow-xs transition cursor-pointer self-start sm:self-auto"
+      >
+        <FaFileCsv className="text-sm" /> Exportar {selectedOption} a Excel (CSV)
+      </button>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="py-16 text-center text-slate-500 font-medium">
@@ -602,6 +806,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Productos") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -817,6 +1022,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Clientes") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -951,6 +1157,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
     const todayStr = new Date().toISOString().split("T")[0];
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -1237,6 +1444,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Ventas") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -1448,6 +1656,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Pendientes") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">
@@ -1552,6 +1761,7 @@ const LookDetail = ({ selectedOption, searchTerm, setNumber }) => {
   if (selectedOption === "Movimientos") {
     return (
       <div className="w-full">
+        {renderExportToolbar()}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 text-slate-600 uppercase text-xs bg-slate-50">

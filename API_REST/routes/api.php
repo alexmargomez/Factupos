@@ -119,7 +119,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('workers')->group(function () {
         Route::get('/', [WorkerController::class, 'index']);
+        Route::get('/settlements', [WorkerController::class, 'settlements']);
         Route::post('/', [WorkerController::class, 'create']);
+        Route::post('/{id}/settle', [WorkerController::class, 'settle']);
         Route::get('/{id}', [WorkerController::class, 'show']);
         Route::put('/{id}', [WorkerController::class, 'update']);
         Route::delete('/{id}', [WorkerController::class, 'destroy']);

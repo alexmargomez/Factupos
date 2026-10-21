@@ -13,6 +13,9 @@ import {
   FaCashRegister,
   FaReceipt,
   FaHandHoldingUsd,
+  FaFileCsv,
+  FaHistory,
+  FaPercent,
 } from "react-icons/fa";
 
 const Report = () => {
@@ -21,11 +24,14 @@ const Report = () => {
 
   const [sales, setSales] = useState([]);
   const [workers, setWorkers] = useState([]);
+  const [settlements, setSettlements] = useState([]);
   const [products, setProducts] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("all"); // 'today' | 'month' | 'all'
+
   const [newWorkerName, setNewWorkerName] = useState("");
+  const [newWorkerCommission, setNewWorkerCommission] = useState("50");
   const [statusMsg, setStatusMsg] = useState("");
 
   const [newExpense, setNewExpense] = useState({
@@ -43,12 +49,16 @@ const Report = () => {
         Accept: "application/json",
       };
 
-      const [salesRes, workersRes, productsRes, expensesRes] = await Promise.all([
-        fetch(`${API_URL}/sales`, { headers }),
-        fetch(`${API_URL}/workers`, { headers }),
-        fetch(`${API_URL}/products`, { headers }),
-        fetch(`${API_URL}/expenses`, { headers }).catch(() => ({ ok: false })),
-      ]);
+      const [salesRes, workersRes, productsRes, expensesRes, settlementsRes] =
+        await Promise.all([
+          fetch(`${API_URL}/sales`, { headers }),
+          fetch(`${API_URL}/workers`, { headers }),
+          fetch(`${API_URL}/products`, { headers }),
+          fetch(`${API_URL}/expenses`, { headers }).catch(() => ({ ok: false })),
+          fetch(`${API_URL}/workers/settlements`, { headers }).catch(() => ({
+            ok: false,
+          })),
+        ]);
 
       if (salesRes.ok) {
         const sData = await salesRes.json();
@@ -65,6 +75,10 @@ const Report = () => {
       if (expensesRes && expensesRes.ok) {
         const eData = await expensesRes.json();
         setExpenses(Array.isArray(eData) ? eData : []);
+      }
+      if (settlementsRes && settlementsRes.ok) {
+        const stData = await settlementsRes.json();
+        setSettlements(Array.isArray(stData) ? stData : []);
       }
     } catch (error) {
       console.error("Error al cargar datos de reportes:", error);
@@ -104,6 +118,9 @@ const Report = () => {
   const filteredExpenses = expenses.filter((exp) =>
     matchesPeriod(exp.created_at || exp.expense_date)
   );
+  const filteredSettlements = settlements.filter((st) =>
+    matchesPeriod(st.created_at || st.settlement_date)
+  );
 
   const totalFacturado = filteredSales.reduce(
     (acc, s) => acc + Number(s.total || 0),
@@ -125,7 +142,10 @@ const Report = () => {
       const qty = Number(d.quantity || 1);
       const unitCost =
         Number(d.product?.cost_price ?? 0) ||
-        Number(products.find((p) => Number(p.id) === Number(d.product_id))?.cost_price ?? 0);
+        Number(
+          products.find((p) => Number(p.id) === Number(d.product_id))
+            ?.cost_price ?? 0
+        );
       return sum + qty * unitCost;
     }, 0);
     return acc + subCost;
@@ -165,7 +185,11 @@ const Report = () => {
         ? Number(s.paid_amount)
         : Math.max(0, Number(s.total || 0) - Number(s.pending_balance || 0));
     const method = (s.payment_method || "Efectivo").toLowerCase();
-    if (method.includes("transferencia") || method.includes("nequi") || method.includes("tarjeta")) {
+    if (
+      method.includes("transferencia") ||
+      method.includes("nequi") ||
+      method.includes("tarjeta")
+    ) {
       return acc + paid;
     }
     if (method.includes("mixto") && s.payment_notes) {
@@ -210,9 +234,147 @@ const Report = () => {
     return isNaN(d) ? "N/A" : d.toLocaleDateString("es-CO");
   };
 
-  const handleResetWorkerDay = async (worker) => {
+  // Exportador universal a CSV compatible con Excel (UTF-8 con BOM)
+  const downloadCsv = (filename, headers, rows) => {
+    const escapeCell = (val) => {
+      const str = String(val ?? "").replace(/"/g, '""');
+      return `"${str}"`;
+    };
+    const csvContent =
+      "\uFEFF" +
+      [
+        headers.map(escapeCell).join(";"),
+        ...rows.map((r) => r.map(escapeCell).join(";")),
+      ].join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportSalesCsv = () => {
+    const headers = [
+      "ID Venta",
+      "Factura",
+      "Fecha",
+      "Cliente",
+      "Placa Vehiculo",
+      "Mecanico",
+      "Metodo de Pago",
+      "Estado Pago",
+      "Abonado ($)",
+      "Saldo Pendiente ($)",
+      "Total Factura ($)",
+    ];
+    const rows = filteredSales.map((s) => [
+      s.id,
+      s.invoice?.invoice_number || `FACT-${s.id}`,
+      formatDateTime(s.created_at),
+      s.customer?.name || `Cliente #${s.customer_id}`,
+      s.vehicle?.plate || "Mostrador",
+      s.worker?.name || "General",
+      s.payment_method || "Efectivo",
+      Number(s.pending_balance || 0) > 0 ? "Pendiente / Abono" : "Pagado",
+      s.paid_amount ?? s.total,
+      s.pending_balance ?? 0,
+      s.total,
+    ]);
+    downloadCsv(`ventas_${period}_${Date.now()}.csv`, headers, rows);
+  };
+
+  const handleExportExpensesCsv = () => {
+    const headers = ["ID", "Fecha", "Concepto", "Categoria", "Medio de Pago", "Valor ($)"];
+    const rows = filteredExpenses.map((e) => [
+      e.id,
+      formatDateTime(e.created_at || e.expense_date),
+      e.description,
+      e.category || "General",
+      e.payment_method || "Efectivo",
+      e.amount,
+    ]);
+    downloadCsv(`gastos_caja_${period}_${Date.now()}.csv`, headers, rows);
+  };
+
+  const handleExportSettlementsCsv = () => {
+    const headers = [
+      "ID",
+      "Fecha",
+      "Mecanico",
+      "Producido Bruto ($)",
+      "Comision (%)",
+      "Pago al Mecanico ($)",
+      "Utilidad Taller ($)",
+      "Notas",
+    ];
+    const rows = filteredSettlements.map((st) => [
+      st.id,
+      formatDateTime(st.created_at || st.settlement_date),
+      st.worker_name,
+      st.gross_amount,
+      `${st.commission_percentage}%`,
+      st.paid_amount,
+      st.workshop_share,
+      st.notes || "",
+    ]);
+    downloadCsv(`liquidaciones_mecanicos_${period}_${Date.now()}.csv`, headers, rows);
+  };
+
+  const handleSettleWorkerDay = async (worker) => {
+    const gross = Number(worker.totalDia || 0);
+    const pct = Number(worker.commission_percentage ?? 50);
+    const toPay = Math.round((gross * pct) / 100);
+
+    if (
+      !window.confirm(
+        `¿Confirmas liquidar el turno de ${worker.name}?\n\n` +
+          `• Producido Bruto: $ ${formatPrice(gross)}\n` +
+          `• Comisión (${pct}%): $ ${formatPrice(toPay)} a pagar al mecánico\n` +
+          `• Utilidad Taller: $ ${formatPrice(Math.max(0, gross - toPay))}`
+      )
+    ) {
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_URL}/workers/${worker.id}`, {
+      const response = await fetch(`${API_URL}/workers/${worker.id}/settle`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          commission_percentage: pct,
+          notes: `Liquidación (${pct}%)`,
+        }),
+      });
+      if (response.ok) {
+        setStatusMsg(
+          `Liquidación de ${worker.name} registrada: Pago técnico $ ${formatPrice(toPay)}`
+        );
+        setTimeout(() => setStatusMsg(""), 4000);
+        await fetchReportData();
+      }
+    } catch (error) {
+      console.error("Error al liquidar mecánico:", error);
+    }
+  };
+
+  const handleUpdateCommission = async (worker, newPctRaw) => {
+    const pct = Math.max(0, Math.min(100, parseInt(newPctRaw, 10) || 0));
+    setWorkers((prev) =>
+      prev.map((w) =>
+        w.id === worker.id ? { ...w, commission_percentage: pct } : w
+      )
+    );
+    try {
+      await fetch(`${API_URL}/workers/${worker.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -220,24 +382,18 @@ const Report = () => {
           Accept: "application/json",
         },
         body: JSON.stringify({
-          name: worker.name,
-          totalDia: 0,
-          reset: true,
+          commission_percentage: pct,
         }),
       });
-      if (response.ok) {
-        setStatusMsg(`Se reinició el acumulado diario de ${worker.name}`);
-        setTimeout(() => setStatusMsg(""), 3500);
-        await fetchReportData();
-      }
     } catch (error) {
-      console.error("Error al reiniciar acumulado del mecánico:", error);
+      console.error("Error actualizando comisión:", error);
     }
   };
 
   const handleAddWorker = async (e) => {
     e.preventDefault();
     if (!newWorkerName.trim()) return;
+    const pct = Math.max(0, Math.min(100, parseInt(newWorkerCommission, 10) || 50));
     try {
       const response = await fetch(`${API_URL}/workers`, {
         method: "POST",
@@ -249,10 +405,12 @@ const Report = () => {
         body: JSON.stringify({
           name: newWorkerName.trim(),
           totalDia: 0,
+          commission_percentage: pct,
         }),
       });
       if (response.ok) {
         setNewWorkerName("");
+        setNewWorkerCommission("50");
         setStatusMsg("Mecánico registrado exitosamente");
         setTimeout(() => setStatusMsg(""), 3500);
         await fetchReportData();
@@ -356,7 +514,9 @@ const Report = () => {
         },
         body: JSON.stringify({
           abono: pending,
-          payment_notes: `${sale.payment_notes ? sale.payment_notes + " | " : ""}Saldo pagado ($ ${formatPrice(pending)})`,
+          payment_notes: `${
+            sale.payment_notes ? sale.payment_notes + " | " : ""
+          }Saldo pagado ($ ${formatPrice(pending)})`,
         }),
       });
       if (response.ok) {
@@ -372,16 +532,36 @@ const Report = () => {
   return (
     <div className="min-h-screen w-full flex flex-col bg-slate-100 p-4 md:p-6 gap-5">
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-5 py-3.5 rounded-xl shadow-sm border border-slate-200">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white px-5 py-3.5 rounded-xl shadow-sm border border-slate-200">
         <div>
           <h1 className="text-xl font-extrabold text-[#023047] tracking-tight">
-            REPORTES, ARQUEO DE CAJA Y CONTROL DE GASTOS
+            REPORTES, ARQUEO DE CAJA, COMISIONES Y EXPORTACIÓN
           </h1>
           <p className="text-xs text-slate-500">
-            Resumen financiero de ventas, arqueo por medio de pago, gastos menores y liquidación de mecánicos
+            Resumen financiero, arqueo por medio de pago, liquidación porcentual de mecánicos y exportación a Excel
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleExportSalesCsv}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+            title="Descargar ventas del período en formato Excel (CSV)"
+          >
+            <FaFileCsv />
+            <span>Exportar Ventas</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportExpensesCsv}
+            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+            title="Descargar gastos de caja en formato Excel (CSV)"
+          >
+            <FaFileCsv />
+            <span>Exportar Gastos</span>
+          </button>
+
           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
             {[
               { id: "today", label: "Hoy" },
@@ -539,28 +719,40 @@ const Report = () => {
         </div>
       </div>
 
-      {/* Grilla: Mecánicos, Gastos Menores y Stock Bajo */}
+      {/* Grilla: Mecánicos + Comisiones, Gastos Menores y Stock Bajo */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Producción por Mecánico */}
-        <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4">
+        {/* Producción y Comisiones por Mecánico */}
+        <div className="lg:col-span-6 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
             <div>
               <h2 className="text-base font-extrabold text-[#023047]">
-                Liquidación Diaria por Mecánico
+                Comisiones y Liquidación de Mecánicos
               </h2>
               <p className="text-xs text-slate-500">
-                Acumulado del día en servicios asignados
+                Configura el % de comisión de cada técnico y liquida su pago del día
               </p>
             </div>
 
-            <form onSubmit={handleAddWorker} className="flex gap-2">
+            <form onSubmit={handleAddWorker} className="flex flex-wrap items-center gap-1.5">
               <input
                 type="text"
-                placeholder="Nuevo mecánico..."
+                placeholder="Nombre mecánico..."
                 value={newWorkerName}
                 onChange={(e) => setNewWorkerName(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
+                className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#219ebc]"
               />
+              <div className="flex items-center border border-slate-300 rounded-lg px-2 py-1 bg-slate-50">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={newWorkerCommission}
+                  onChange={(e) => setNewWorkerCommission(e.target.value)}
+                  className="w-10 text-xs font-bold text-center bg-transparent focus:outline-none"
+                  title="Porcentaje de comisión para el mecánico"
+                />
+                <FaPercent className="text-[10px] text-slate-400" />
+              </div>
               <button
                 type="submit"
                 className="blue flex items-center gap-1 text-xs py-1.5 px-3"
@@ -578,107 +770,198 @@ const Report = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 uppercase text-xs bg-slate-50">
-                    <th className="py-2.5 px-3">Mecánico</th>
-                    <th className="py-2.5 px-3 text-right">Acumulado Día</th>
-                    <th className="py-2.5 px-3 text-center">Acciones</th>
+                  <tr className="border-b border-slate-200 text-slate-500 uppercase text-[11px] bg-slate-50">
+                    <th className="py-2 px-2">Mecánico</th>
+                    <th className="py-2 px-2 text-center">% Com.</th>
+                    <th className="py-2 px-2 text-right">Bruto Día</th>
+                    <th className="py-2 px-2 text-right">Pago Técnico</th>
+                    <th className="py-2 px-2 text-right">Taller</th>
+                    <th className="py-2 px-2 text-center">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {workers.map((w) => (
-                    <tr key={w.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-semibold text-slate-800">
-                        {w.name}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-extrabold text-emerald-700">
-                        $ {formatPrice(w.totalDia)}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleResetWorkerDay(w)}
-                            className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                            title="Reiniciar acumulado del día a $0"
-                          >
-                            <FaSyncAlt /> Cerrar Día
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteWorker(w.id)}
-                            className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white text-xs cursor-pointer transition-colors"
-                            title="Eliminar mecánico"
-                          >
-                            <FaTrash />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {workers.map((w) => {
+                    const gross = Number(w.totalDia || 0);
+                    const pct = Number(w.commission_percentage ?? 50);
+                    const techPay = Math.round((gross * pct) / 100);
+                    const shopShare = Math.max(0, gross - techPay);
+
+                    return (
+                      <tr key={w.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-2 font-bold text-slate-800">
+                          {w.name}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <div className="inline-flex items-center border border-slate-300 rounded px-1.5 py-0.5 bg-white">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={pct}
+                              onChange={(e) =>
+                                handleUpdateCommission(w, e.target.value)
+                              }
+                              className="w-10 text-center font-bold text-[#023047] focus:outline-none"
+                            />
+                            <span className="text-[10px] text-slate-400">%</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-semibold text-slate-700">
+                          $ {formatPrice(gross)}
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-extrabold text-emerald-700">
+                          $ {formatPrice(techPay)}
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-semibold text-sky-800">
+                          $ {formatPrice(shopShare)}
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleSettleWorkerDay(w)}
+                              className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Guardar liquidación en historial y reiniciar acumulado a $0"
+                            >
+                              <FaSyncAlt /> Liquidar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteWorker(w.id)}
+                              className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white text-xs cursor-pointer transition-colors"
+                              title="Eliminar mecánico"
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+
+          {/* Historial Reciente de Liquidaciones */}
+          <div className="pt-3 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-extrabold uppercase text-slate-600 flex items-center gap-1.5">
+                <FaHistory className="text-[#219ebc]" />
+                <span>
+                  Historial de Liquidaciones Pagadas ({filteredSettlements.length})
+                </span>
+              </span>
+              {filteredSettlements.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleExportSettlementsCsv}
+                  className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <FaFileCsv /> Exportar CSV
+                </button>
+              )}
+            </div>
+            {filteredSettlements.length === 0 ? (
+              <p className="text-xs text-slate-400 py-2">
+                Aún no se han registrado cierres de liquidación en este período.
+              </p>
+            ) : (
+              <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 text-xs border border-slate-100 rounded-lg p-2 bg-slate-50">
+                {filteredSettlements.slice(0, 15).map((st) => (
+                  <div
+                    key={st.id}
+                    className="py-1.5 flex items-center justify-between gap-2"
+                  >
+                    <div>
+                      <span className="font-bold text-slate-800">
+                        {st.worker_name}
+                      </span>{" "}
+                      <span className="text-slate-400">
+                        ({st.commission_percentage}% de $ {formatPrice(st.gross_amount)})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-extrabold text-emerald-700">
+                        Pagado: $ {formatPrice(st.paid_amount)}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {formatDateTime(st.created_at || st.settlement_date)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Registro de Gastos Menores / Salidas de Caja */}
-        <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-3">
+        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-3">
           <div className="border-b border-slate-200 pb-3 flex items-center justify-between">
             <div>
               <h2 className="text-base font-extrabold text-[#023047] flex items-center gap-1.5">
                 <FaReceipt className="text-rose-500" />
-                <span>Gastos Menores / Salidas de Caja</span>
+                <span>Gastos de Caja</span>
               </h2>
               <p className="text-xs text-slate-500">
-                Registra pagos de insumos, domicilios o gastos del día
+                Salidas e insumos del día
               </p>
             </div>
           </div>
 
-          <form onSubmit={handleAddExpense} className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <form
+            onSubmit={handleAddExpense}
+            className="grid grid-cols-1 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200"
+          >
             <input
               type="text"
               placeholder="Concepto del gasto..."
               value={newExpense.description}
               onChange={(e) =>
-                setNewExpense((prev) => ({ ...prev, description: e.target.value }))
-              }
-              className="sm:col-span-2 px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
-              required
-            />
-            <input
-              type="number"
-              min="1"
-              placeholder="Valor ($ COP)"
-              value={newExpense.amount}
-              onChange={(e) =>
-                setNewExpense((prev) => ({ ...prev, amount: e.target.value }))
-              }
-              className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white font-bold"
-              required
-            />
-            <select
-              value={newExpense.payment_method}
-              onChange={(e) =>
                 setNewExpense((prev) => ({
                   ...prev,
-                  payment_method: e.target.value,
+                  description: e.target.value,
                 }))
               }
               className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="Efectivo">Sale de: Efectivo</option>
-              <option value="Transferencia / Nequi">Sale de: Transf./Nequi</option>
-            </select>
+              required
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                min="1"
+                placeholder="Valor ($)"
+                value={newExpense.amount}
+                onChange={(e) =>
+                  setNewExpense((prev) => ({ ...prev, amount: e.target.value }))
+                }
+                className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white font-bold"
+                required
+              />
+              <select
+                value={newExpense.payment_method}
+                onChange={(e) =>
+                  setNewExpense((prev) => ({
+                    ...prev,
+                    payment_method: e.target.value,
+                  }))
+                }
+                className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
+              >
+                <option value="Efectivo">Efectivo</option>
+                <option value="Transferencia / Nequi">Transf./Nequi</option>
+              </select>
+            </div>
             <button
               type="submit"
-              className="sm:col-span-2 py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+              className="py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
             >
-              <FaPlus /> Registrar Gasto de Caja
+              <FaPlus /> Registrar Gasto
             </button>
           </form>
 
-          <div className="flex-1 overflow-y-auto max-h-52 divide-y divide-slate-100">
+          <div className="flex-1 overflow-y-auto max-h-56 divide-y divide-slate-100">
             {filteredExpenses.length === 0 ? (
               <div className="py-6 text-center text-slate-400 text-xs">
                 No hay gastos registrados en este período.
@@ -690,9 +973,12 @@ const Report = () => {
                   className="py-2 px-1 flex items-center justify-between text-xs"
                 >
                   <div>
-                    <p className="font-semibold text-slate-800">{exp.description}</p>
+                    <p className="font-semibold text-slate-800">
+                      {exp.description}
+                    </p>
                     <span className="text-[11px] text-slate-400">
-                      {exp.payment_method} • {formatDateTime(exp.created_at || exp.expense_date)}
+                      {exp.payment_method} •{" "}
+                      {formatDateTime(exp.created_at || exp.expense_date)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -721,7 +1007,7 @@ const Report = () => {
               Alertas de Stock ({lowStockProducts.length})
             </h2>
             <p className="text-xs text-slate-500">
-              Productos con ≤ 5 unidades
+              Productos en o por debajo del mínimo
             </p>
           </div>
 

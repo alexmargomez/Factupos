@@ -9,7 +9,7 @@ class Worker extends Model
     use HasFactory;
 
     protected $table = 'Workers';
-    protected $fillable = ['name', 'totalDia'];
+    protected $fillable = ['name', 'totalDia', 'commission_percentage'];
 
     public function sales()
     {
@@ -19,5 +19,10 @@ class Worker extends Model
     public function schedules()
     {
         return $this->hasMany(Schedule::class, 'worker_id');
+    }
+
+    public function settlements()
+    {
+        return $this->hasMany(WorkerSettlement::class, 'worker_id');
     }
 }
