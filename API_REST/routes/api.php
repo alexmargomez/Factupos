@@ -16,6 +16,7 @@ use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\WorkerController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\AnalyticsController;
 
 Route::get('/', function () {
     return response()->json(['message' => 'API RESTful Inventory System'], 200);
@@ -138,6 +139,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [SupplierController::class, 'create']);
         Route::put('/{id}', [SupplierController::class, 'update']);
         Route::delete('/{id}', [SupplierController::class, 'destroy']);
+    });
+
+    Route::prefix('analytics')->group(function () {
+        Route::get('/summary', [AnalyticsController::class, 'summary']);
+        Route::get('/financial', [AnalyticsController::class, 'financial']);
+        Route::get('/inventory-valuation', [AnalyticsController::class, 'inventoryValuation']);
+        Route::get('/vehicle-alerts', [AnalyticsController::class, 'vehicleAlerts']);
     });
 });
 
