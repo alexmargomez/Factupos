@@ -225,7 +225,7 @@ class PosBillingService
                 : max(0, $totalVal - $paidVal);
 
             $statusVal = $validated['payment_status']
-                ?? ($pendingVal <= 0 ? 'Pagado' : ($paidVal > 0 ? 'Abono Parcial' : 'Pendiente / Crédito'));
+                ?? ($pendingVal <= 0 ? 'Pagado' : ($paidVal > 0 ? 'Parcial' : 'Pendiente'));
 
             $sale = Sale::create([
                 'customer_id' => $validated['customer_id'],
@@ -247,7 +247,9 @@ class PosBillingService
                     static fn (array $a, array $b): int => ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0))
                 );
 
-                $allowOversell = !empty($validated['allow_oversell']);
+                $strictStock = !empty($validated['enforce_stock'])
+                    || !empty($validated['strict_stock'])
+                    || (array_key_exists('allow_oversell', $validated) && $validated['allow_oversell'] === false);
 
                 foreach ($sortedProducts as $prod) {
                     $qty = (int) ($prod['quantity'] ?? $prod['und'] ?? 1);
@@ -277,12 +279,15 @@ class PosBillingService
                             'stock' => 0,
                         ]);
                     }
-                    if (!$allowOversell && (int) $inventory->stock < $qty) {
+                    if ($strictStock && (int) $inventory->stock < $qty) {
                         throw new \InvalidArgumentException(
                             "Stock insuficiente para el producto #{$productId} (disponible: {$inventory->stock}, solicitado: {$qty})."
                         );
                     }
-                    $inventory->decrement('stock', $qty);
+                    $decrementAmount = $strictStock ? $qty : min(max(0, (int) $inventory->stock), $qty);
+                    if ($decrementAmount > 0) {
+                        $inventory->decrement('stock', $decrementAmount);
+                    }
 
                     \App\Models\InventoryMovement::create([
                         'inventory_id' => $inventory->id,
@@ -346,7 +351,7 @@ class PosBillingService
 
                 $validated['paid_amount'] = $newPaid;
                 $validated['pending_balance'] = $newPending;
-                $validated['payment_status'] = $newPending <= 0 ? 'Pagado' : 'Abono Parcial';
+                $validated['payment_status'] = $newPending <= 0 ? 'Pagado' : 'Parcial';
                 unset($validated['abono']);
             } elseif (array_key_exists('paid_amount', $validated) && $validated['paid_amount'] !== null) {
                 $totalTarget = isset($validated['total']) ? (int) $validated['total'] : (int) $lockedSale->total;
@@ -354,7 +359,7 @@ class PosBillingService
                 $newPending = max(0, $totalTarget - $newPaid);
                 $validated['pending_balance'] = $newPending;
                 $validated['payment_status'] = $validated['payment_status']
-                    ?? ($newPending <= 0 ? 'Pagado' : ($newPaid > 0 ? 'Abono Parcial' : 'Pendiente / Crédito'));
+                    ?? ($newPending <= 0 ? 'Pagado' : ($newPaid > 0 ? 'Parcial' : 'Pendiente'));
             }
 
             $lockedSale->update($validated);

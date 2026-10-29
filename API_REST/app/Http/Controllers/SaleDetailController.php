@@ -29,14 +29,21 @@ class SaleDetailController extends Controller
         return DB::transaction(function () use ($validated) {
             $sale_detail = SaleDetail::create($validated);
 
-            $inventory = Inventory::firstOrCreate(
-                ['product_id' => $validated['product_id']],
-                ['stock' => 0]
-            );
+            $inventory = Inventory::where('product_id', $validated['product_id'])
+                ->lockForUpdate()
+                ->first();
+            if (!$inventory) {
+                $inventory = Inventory::create([
+                    'product_id' => $validated['product_id'],
+                    'stock' => 0,
+                ]);
+            }
 
             $qty = (int) $validated['quantity'];
-            $inventory->stock = max(0, (int) $inventory->stock - $qty);
-            $inventory->save();
+            $decrementAmount = min(max(0, (int) $inventory->stock), $qty);
+            if ($decrementAmount > 0) {
+                $inventory->decrement('stock', $decrementAmount);
+            }
 
             InventoryMovement::create([
                 'inventory_id' => $inventory->id,

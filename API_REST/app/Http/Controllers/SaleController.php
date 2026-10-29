@@ -36,10 +36,17 @@ class SaleController extends Controller
             'products' => 'nullable|array',
             'services' => 'nullable|array',
             'create_invoice' => 'nullable|boolean',
+            'allow_oversell' => 'nullable|boolean',
+            'enforce_stock' => 'nullable|boolean',
+            'strict_stock' => 'nullable|boolean',
         ]);
 
-        $sale = $this->billingService->createSaleTransaction($validated);
-        return response()->json($sale, 201);
+        try {
+            $sale = $this->billingService->createSaleTransaction($validated);
+            return response()->json($sale, 201);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     public function show($id)
@@ -65,8 +72,12 @@ class SaleController extends Controller
             'abono' => 'nullable|numeric|min:1',
         ]);
 
-        $updated = $this->billingService->updateSaleTransaction($sale, $validated);
-        return response()->json($updated, 200);
+        try {
+            $updated = $this->billingService->updateSaleTransaction($sale, $validated);
+            return response()->json($updated, 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     public function destroy($id)
