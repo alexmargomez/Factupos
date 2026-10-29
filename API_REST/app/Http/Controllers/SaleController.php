@@ -2,18 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Models\Sale;
-use App\Models\SaleDetail;
-use App\Models\Service;
-use App\Models\Invoice;
-use App\Models\Inventory;
-use App\Models\InventoryMovement;
-use App\Models\Worker;
+use App\Services\PosBillingService;
+use Illuminate\Http\Request;
 
 class SaleController extends Controller
 {
+    public function __construct(
+        private readonly PosBillingService $billingService = new PosBillingService()
+    ) {}
+
     public function index()
     {
         $sales = Sale::with(['customer', 'vehicle', 'invoice', 'saleDetails.product', 'services', 'worker'])
@@ -39,92 +37,8 @@ class SaleController extends Controller
             'create_invoice' => 'nullable|boolean',
         ]);
 
-        return DB::transaction(function () use ($validated, $request) {
-            $totalVal = (int) $validated['total'];
-            $paidVal = array_key_exists('paid_amount', $validated) && $validated['paid_amount'] !== null
-                ? (int) $validated['paid_amount']
-                : $totalVal;
-            $pendingVal = array_key_exists('pending_balance', $validated) && $validated['pending_balance'] !== null
-                ? max(0, (int) $validated['pending_balance'])
-                : max(0, $totalVal - $paidVal);
-
-            $statusVal = $validated['payment_status']
-                ?? ($pendingVal <= 0 ? 'Pagado' : ($paidVal > 0 ? 'Abono Parcial' : 'Pendiente / Crédito'));
-
-            $sale = Sale::create([
-                'customer_id' => $validated['customer_id'],
-                'vehicle_id' => $validated['vehicle_id'] ?? null,
-                'worker_id' => $validated['worker_id'] ?? null,
-                'total' => $totalVal,
-                'payment_method' => $validated['payment_method'],
-                'payment_status' => $statusVal,
-                'paid_amount' => $paidVal,
-                'pending_balance' => $pendingVal,
-                'payment_notes' => $validated['payment_notes'] ?? null,
-            ]);
-
-            if (!empty($validated['products']) && is_array($validated['products'])) {
-                foreach ($validated['products'] as $prod) {
-                    $qty = (int) ($prod['quantity'] ?? $prod['und'] ?? 1);
-                    $priceTotal = (int) ($prod['price_total'] ?? $prod['total'] ?? 0);
-                    $productId = (int) $prod['id'];
-
-                    SaleDetail::create([
-                        'customer_id' => $sale->customer_id,
-                        'sale_id' => $sale->id,
-                        'product_id' => $productId,
-                        'quantity' => $qty,
-                        'price_total' => $priceTotal,
-                    ]);
-
-                    $inventory = Inventory::firstOrCreate(
-                        ['product_id' => $productId],
-                        ['stock' => 0]
-                    );
-                    $inventory->stock = max(0, (int) $inventory->stock - $qty);
-                    $inventory->save();
-
-                    InventoryMovement::create([
-                        'inventory_id' => $inventory->id,
-                        'movement_type' => 'outgoing',
-                        'quantity' => $qty,
-                        'movement_date' => now(),
-                        'reason' => 'Venta #' . $sale->id,
-                    ]);
-                }
-            }
-
-            $totalServicio = 0;
-            if (!empty($validated['services']) && is_array($validated['services'])) {
-                foreach ($validated['services'] as $srv) {
-                    $srvPrice = (int) ($srv['price'] ?? 0);
-                    Service::create([
-                        'customer_id' => $sale->customer_id,
-                        'vehicle_id' => $sale->vehicle_id,
-                        'sale_id' => $sale->id,
-                        'date' => $srv['date'] ?? 'Servicio general',
-                        'price' => $srvPrice,
-                    ]);
-                    $totalServicio += $srvPrice;
-                }
-            }
-
-            if (!empty($validated['create_invoice'])) {
-                Invoice::create(['sale_id' => $sale->id]);
-            }
-
-            if (!empty($sale->worker_id) && $totalServicio > 0) {
-                $worker = Worker::find($sale->worker_id);
-                if ($worker) {
-                    $worker->totalDia = ((int) $worker->totalDia) + $totalServicio;
-                    $worker->save();
-                }
-            }
-
-            $sale->load(['customer', 'vehicle', 'invoice', 'saleDetails.product', 'services', 'worker']);
-
-            return response()->json($sale, 201);
-        });
+        $sale = $this->billingService->createSaleTransaction($validated);
+        return response()->json($sale, 201);
     }
 
     public function show($id)
@@ -150,31 +64,8 @@ class SaleController extends Controller
             'abono' => 'nullable|numeric|min:1',
         ]);
 
-        if (!empty($validated['abono'])) {
-            $abono = (int) $validated['abono'];
-            $currentPaid = $sale->paid_amount !== null
-                ? (int) $sale->paid_amount
-                : max(0, (int) $sale->total - (int) $sale->pending_balance);
-            $newPaid = min((int) $sale->total, $currentPaid + $abono);
-            $newPending = max(0, (int) $sale->total - $newPaid);
-
-            $validated['paid_amount'] = $newPaid;
-            $validated['pending_balance'] = $newPending;
-            $validated['payment_status'] = $newPending <= 0 ? 'Pagado' : 'Abono Parcial';
-            unset($validated['abono']);
-        } elseif (array_key_exists('paid_amount', $validated) && $validated['paid_amount'] !== null) {
-            $totalTarget = isset($validated['total']) ? (int) $validated['total'] : (int) $sale->total;
-            $newPaid = (int) $validated['paid_amount'];
-            $newPending = max(0, $totalTarget - $newPaid);
-            $validated['pending_balance'] = $newPending;
-            $validated['payment_status'] = $validated['payment_status']
-                ?? ($newPending <= 0 ? 'Pagado' : ($newPaid > 0 ? 'Abono Parcial' : 'Pendiente / Crédito'));
-        }
-
-        $sale->update($validated);
-        $sale->load(['customer', 'vehicle', 'invoice', 'saleDetails.product', 'services', 'worker']);
-
-        return response()->json($sale, 200);
+        $updated = $this->billingService->updateSaleTransaction($sale, $validated);
+        return response()->json($updated, 200);
     }
 
     public function destroy($id)

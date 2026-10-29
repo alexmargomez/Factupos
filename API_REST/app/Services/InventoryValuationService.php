@@ -36,7 +36,7 @@ class InventoryValuationService
         $reorderAlerts = [];
 
         foreach ($products as $product) {
-            $stock = (int) ($product->inventory->quantity ?? 0);
+            $stock = (int) ($product->inventory->stock ?? $product->inventory->quantity ?? 0);
             $minStock = (int) ($product->min_stock ?? 5);
             $costPrice = (int) ($product->cost_price ?? 0);
             $salePrice = (int) ($product->price ?? 0);
