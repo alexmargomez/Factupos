@@ -253,12 +253,21 @@ class PosBillingService
                         'price_total' => $priceTotal,
                     ]);
 
-                    $inventory = \App\Models\Inventory::firstOrCreate(
-                        ['product_id' => $productId],
-                        ['stock' => 0]
-                    );
-                    $inventory->stock = max(0, (int) $inventory->stock - $qty);
-                    $inventory->save();
+                    $inventory = \App\Models\Inventory::where('product_id', $productId)
+                        ->lockForUpdate()
+                        ->first();
+                    if (!$inventory) {
+                        $inventory = \App\Models\Inventory::create([
+                            'product_id' => $productId,
+                            'stock' => 0,
+                        ]);
+                    }
+                    if (!empty($validated['strict_stock']) && (int) $inventory->stock < $qty) {
+                        throw new \InvalidArgumentException(
+                            "Stock insuficiente para el producto #{$productId} (disponible: {$inventory->stock}, solicitado: {$qty})."
+                        );
+                    }
+                    $inventory->decrement('stock', $qty);
 
                     \App\Models\InventoryMovement::create([
                         'inventory_id' => $inventory->id,
@@ -290,11 +299,7 @@ class PosBillingService
             }
 
             if (!empty($sale->worker_id) && $totalServicio > 0) {
-                $worker = Worker::find($sale->worker_id);
-                if ($worker) {
-                    $worker->totalDia = ((int) $worker->totalDia) + $totalServicio;
-                    $worker->save();
-                }
+                Worker::where('id', $sale->worker_id)->increment('totalDia', $totalServicio);
             }
 
             $sale->load(['customer', 'vehicle', 'invoice', 'saleDetails.product', 'services', 'worker']);

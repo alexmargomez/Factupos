@@ -104,7 +104,7 @@ class CsvAccountingExportService
 
         $rows = [];
         foreach ($products as $product) {
-            $stock = max(0, (int) ($product->inventory->quantity ?? 0));
+            $stock = max(0, (int) ($product->inventory->stock ?? $product->inventory->quantity ?? 0));
             $cost = (int) ($product->cost_price ?? 0);
             $price = (int) ($product->price ?? 0);
             $profit = $price - $cost;
