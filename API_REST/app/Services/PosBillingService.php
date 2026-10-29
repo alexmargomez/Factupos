@@ -240,10 +240,25 @@ class PosBillingService
             ]);
 
             if (!empty($validated['products']) && is_array($validated['products'])) {
-                foreach ($validated['products'] as $prod) {
+                $sortedProducts = $validated['products'];
+                // Ordenamiento canónico por product_id ascendente para prevenir Deadlocks SQL entre cajas concurrentes
+                usort(
+                    $sortedProducts,
+                    static fn (array $a, array $b): int => ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0))
+                );
+
+                $allowOversell = !empty($validated['allow_oversell']);
+
+                foreach ($sortedProducts as $prod) {
                     $qty = (int) ($prod['quantity'] ?? $prod['und'] ?? 1);
                     $priceTotal = (int) ($prod['price_total'] ?? $prod['total'] ?? 0);
                     $productId = (int) $prod['id'];
+
+                    if ($qty <= 0) {
+                        throw new \InvalidArgumentException(
+                            "La cantidad solicitada para el producto #{$productId} debe ser mayor a 0."
+                        );
+                    }
 
                     SaleDetail::create([
                         'customer_id' => $sale->customer_id,
@@ -262,7 +277,7 @@ class PosBillingService
                             'stock' => 0,
                         ]);
                     }
-                    if (!empty($validated['strict_stock']) && (int) $inventory->stock < $qty) {
+                    if (!$allowOversell && (int) $inventory->stock < $qty) {
                         throw new \InvalidArgumentException(
                             "Stock insuficiente para el producto #{$productId} (disponible: {$inventory->stock}, solicitado: {$qty})."
                         );
@@ -308,7 +323,8 @@ class PosBillingService
     }
 
     /**
-     * Actualiza una venta o aplica abonos parciales/totales sobre su saldo en cartera.
+     * Actualiza una venta o aplica abonos parciales/totales sobre su saldo en cartera
+     * bajo bloqueo pesimista (SELECT ... FOR UPDATE) para evitar Lost Updates en abonos concurrentes.
      *
      * @param Sale                 $sale
      * @param array<string, mixed> $validated
@@ -316,29 +332,34 @@ class PosBillingService
      */
     public function updateSaleTransaction(Sale $sale, array $validated): Sale
     {
-        if (!empty($validated['abono'])) {
-            $abono = (int) $validated['abono'];
-            $currentPaid = $sale->paid_amount !== null
-                ? (int) $sale->paid_amount
-                : max(0, (int) $sale->total - (int) $sale->pending_balance);
-            $newPaid = min((int) $sale->total, $currentPaid + $abono);
-            $newPending = max(0, (int) $sale->total - $newPaid);
+        return DB::transaction(function () use ($sale, $validated) {
+            /** @var Sale $lockedSale */
+            $lockedSale = Sale::where('id', $sale->id)->lockForUpdate()->firstOrFail();
 
-            $validated['paid_amount'] = $newPaid;
-            $validated['pending_balance'] = $newPending;
-            $validated['payment_status'] = $newPending <= 0 ? 'Pagado' : 'Abono Parcial';
-            unset($validated['abono']);
-        } elseif (array_key_exists('paid_amount', $validated) && $validated['paid_amount'] !== null) {
-            $totalTarget = isset($validated['total']) ? (int) $validated['total'] : (int) $sale->total;
-            $newPaid = (int) $validated['paid_amount'];
-            $newPending = max(0, $totalTarget - $newPaid);
-            $validated['pending_balance'] = $newPending;
-            $validated['payment_status'] = $validated['payment_status']
-                ?? ($newPending <= 0 ? 'Pagado' : ($newPaid > 0 ? 'Abono Parcial' : 'Pendiente / Crédito'));
-        }
+            if (!empty($validated['abono'])) {
+                $abono = (int) $validated['abono'];
+                $currentPaid = $lockedSale->paid_amount !== null
+                    ? (int) $lockedSale->paid_amount
+                    : max(0, (int) $lockedSale->total - (int) $lockedSale->pending_balance);
+                $newPaid = min((int) $lockedSale->total, $currentPaid + $abono);
+                $newPending = max(0, (int) $lockedSale->total - $newPaid);
 
-        $sale->update($validated);
-        $sale->load(['customer', 'vehicle', 'invoice', 'saleDetails.product', 'services', 'worker']);
-        return $sale;
+                $validated['paid_amount'] = $newPaid;
+                $validated['pending_balance'] = $newPending;
+                $validated['payment_status'] = $newPending <= 0 ? 'Pagado' : 'Abono Parcial';
+                unset($validated['abono']);
+            } elseif (array_key_exists('paid_amount', $validated) && $validated['paid_amount'] !== null) {
+                $totalTarget = isset($validated['total']) ? (int) $validated['total'] : (int) $lockedSale->total;
+                $newPaid = (int) $validated['paid_amount'];
+                $newPending = max(0, $totalTarget - $newPaid);
+                $validated['pending_balance'] = $newPending;
+                $validated['payment_status'] = $validated['payment_status']
+                    ?? ($newPending <= 0 ? 'Pagado' : ($newPaid > 0 ? 'Abono Parcial' : 'Pendiente / Crédito'));
+            }
+
+            $lockedSale->update($validated);
+            $lockedSale->load(['customer', 'vehicle', 'invoice', 'saleDetails.product', 'services', 'worker']);
+            return $lockedSale;
+        });
     }
 }

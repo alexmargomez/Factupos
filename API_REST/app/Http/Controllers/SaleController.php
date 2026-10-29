@@ -16,6 +16,7 @@ class SaleController extends Controller
     {
         $sales = Sale::with(['customer', 'vehicle', 'invoice', 'saleDetails.product', 'services', 'worker'])
             ->orderBy('id', 'desc')
+            ->limit(500)
             ->get();
         return response()->json($sales, 200);
     }
